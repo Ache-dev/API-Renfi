@@ -13,6 +13,17 @@ router.get('/', async (_, res) => {
     }
 });
 
+// Endpoint de reporte: municipios con más reservas
+router.get('/report/mas-reservas', async (_, res) => {
+    try {
+        const data = await municipioController.getMunicipiosConMasReservas();
+        res.json(data);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al obtener municipios con más reservas');
+    }
+});
+
 router.get('/:id', async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -42,6 +53,23 @@ router.post('/', async (req, res) => {
 });
 
 // Ahora acepta DELETE /delete?id=3
+// DELETE por id en path
+router.delete('/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Id inválido');
+    }
+
+    try {
+        await municipioController.eliminarPorId(id);
+        res.json({ message: 'Municipio eliminado correctamente' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al eliminar municipio');
+    }
+});
+
+// Compatibilidad con antiguo /delete?id=3
 router.delete('/delete', async (req, res) => {
     const id = Number(req.query.id);
     if (!Number.isInteger(id)) {
@@ -54,6 +82,23 @@ router.delete('/delete', async (req, res) => {
     } catch (e) {
         console.error(e);
         res.status(500).send('Error al eliminar municipio');
+    }
+});
+
+// Actualizar municipio
+router.put('/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Id inválido');
+    }
+
+    try {
+        const municipio = { ...req.body, IdMunicipio: id };
+        await municipioController.actualizarMunicipio(municipio as any);
+        res.json({ message: 'Municipio actualizado correctamente' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al actualizar municipio');
     }
 });
 

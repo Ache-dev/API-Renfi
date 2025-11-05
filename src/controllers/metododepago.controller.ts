@@ -11,7 +11,21 @@ export const getMetodos = async (): Promise<MetodoDePago[]> => {
 
 export const crearMetodo = async (metodo: MetodoDePago): Promise<void> => {
     try {
+        if (!metodo.NombreMetodoDePago) {
+            throw new Error('Faltan campos requeridos para crear método de pago');
+        }
         await metodoDao.insertar(metodo);
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const actualizarMetodo = async (metodo: MetodoDePago): Promise<void> => {
+    try {
+        if (!metodo.IdMetodoDePago) {
+            throw new Error('IdMetodoDePago es requerido para actualizar');
+        }
+        await metodoDao.actualizar(metodo);
     } catch (error) {
         throw error;
     }

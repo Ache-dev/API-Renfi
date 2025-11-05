@@ -1,6 +1,5 @@
 export interface MetodoDePago {
-    IdMetodo: number;
-    Efectivo: number;
-    Tarjeta: number;
-    PagoMixto: number;
+    IdMetodoDePago?: number;
+    NombreMetodoDePago: string;
+    PagoMixto: boolean;
 }

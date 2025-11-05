@@ -1,9 +1,12 @@
 export interface Usuario {
-    IdUsuario: number;
+    NumeroDocumento?: number; // PK en DB
+    IdRol?: number;
     NombreUsuario: string;
     ApellidoUsuario: string;
     Telefono?: string;
+    Contrasena: string;
     Correo: string;
-    Contraseña: string;
-    Rol: string;
+    Estado?: string;
+    // Campo adicional cuando se hace JOIN con Rol en listados
+    NombreRol?: string;
 }

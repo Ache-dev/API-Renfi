@@ -3,15 +3,14 @@ import { Usuario } from "../models/usuario";
 
 export const listar = async (): Promise<Usuario[]> => {
     try {
-        const tsql = "SELECT * FROM Usuario";
         const pool = await getConnection();
-        const rs = await pool.query<Usuario>(tsql);
-        if (rs != undefined) {
-            return rs.recordset;
+        const rs = await pool.request().execute('SP_ListarUsuarios');
+        if (rs && rs.recordset) {
+            return rs.recordset as Usuario[];
         }
         return [];
     } catch (error) {
-        throw error;
+    throw error;
     }
 };
 
@@ -19,38 +18,56 @@ export const insertar = async (usuario: Usuario): Promise<void> => {
     try {
         const pool = await getConnection();
         await pool.request()
-            .input('IdUsuario', usuario.IdUsuario)
+            .input('IdRol', usuario.IdRol)
             .input('NombreUsuario', usuario.NombreUsuario)
             .input('ApellidoUsuario', usuario.ApellidoUsuario)
             .input('Telefono', usuario.Telefono)
+            .input('Contrasena', usuario.Contrasena)
             .input('Correo', usuario.Correo)
-            .input('Contraseña', usuario.Contraseña)
-            .input('Rol', usuario.Rol)
-            .execute('sp_InsertarUsuario');
+            .input('Estado', usuario.Estado)
+            .execute('SP_RegistrarUsuario');
     } catch (error) {
         throw error;
     }
 };
 
-export const eliminarPorId = async (id: number): Promise<void> => {
+export const actualizar = async (usuario: Usuario): Promise<void> => {
     try {
         const pool = await getConnection();
         await pool.request()
-            .input('IdUsuario', id)
-            .query('DELETE FROM Usuario WHERE IdUsuario = @IdUsuario');
+            .input('NumeroDocumento', usuario.NumeroDocumento)
+            .input('IdRol', usuario.IdRol)
+            .input('NombreUsuario', usuario.NombreUsuario)
+            .input('ApellidoUsuario', usuario.ApellidoUsuario)
+            .input('Telefono', usuario.Telefono)
+            .input('Contrasena', usuario.Contrasena)
+            .input('Estado', usuario.Estado)
+            .execute('SP_ActualizarUsuario');
     } catch (error) {
         throw error;
     }
 };
 
-export const buscarPorId = async (id: number): Promise<Usuario | null> => {
+export const eliminarPorId = async (numeroDocumento: number): Promise<void> => {
+    try {
+        const pool = await getConnection();
+        // La base de datos tiene un TRIGGER INSTEAD OF DELETE que marcará el usuario como 'Suspendido'
+        await pool.request()
+            .input('NumeroDocumento', numeroDocumento)
+            .query('DELETE FROM Usuario WHERE NumeroDocumento = @NumeroDocumento');
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const buscarPorId = async (numeroDocumento: number): Promise<Usuario | null> => {
     try {
         const pool = await getConnection();
         const rs = await pool.request()
-            .input('IdUsuario', id)
-            .query('SELECT * FROM Usuario WHERE IdUsuario = @IdUsuario');
+            .input('NumeroDocumento', numeroDocumento)
+            .query('SELECT U.NumeroDocumento, U.IdRol, U.NombreUsuario, U.ApellidoUsuario, U.Telefono, U.Contrasena, U.Estado, R.NombreRol FROM Usuario U LEFT JOIN Rol R ON U.IdRol = R.IdRol WHERE U.NumeroDocumento = @NumeroDocumento');
         if (rs && rs.recordset && rs.recordset.length > 0) {
-            return rs.recordset[0];
+            return rs.recordset[0] as Usuario;
         }
         return null;
     } catch (error) {

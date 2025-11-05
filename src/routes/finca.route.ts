@@ -13,6 +13,47 @@ router.get('/', async (_, res) => {
     }
 });
 
+// Endpoints de reportes y estadísticas
+router.get('/report/mas-reservadas', async (_, res) => {
+    try {
+        const data = await fincaController.getFincasMasReservadas();
+        res.json(data);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al obtener fincas más reservadas');
+    }
+});
+
+router.get('/report/promedio-calificacion', async (_, res) => {
+    try {
+        const data = await fincaController.getPromedioCalificacionFincas();
+        res.json(data);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al obtener promedio de calificación');
+    }
+});
+
+router.get('/report/total-ingresos', async (_, res) => {
+    try {
+        const data = await fincaController.getTotalIngresosPorFinca();
+        res.json(data);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al obtener total de ingresos por finca');
+    }
+});
+
+router.get('/report/mas-ingresos', async (_, res) => {
+    try {
+        const data = await fincaController.getFincasConMasIngresos();
+        res.json(data);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al obtener fincas con más ingresos');
+    }
+});
+
 router.get('/:id', async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -42,6 +83,23 @@ router.post('/', async (req, res) => {
 });
 
 // Ahora acepta DELETE /delete?id=3
+// DELETE por id en path
+router.delete('/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Id inválido');
+    }
+
+    try {
+        await fincaController.eliminarPorId(id);
+        res.json({ message: 'Finca eliminada correctamente' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al eliminar finca');
+    }
+});
+
+// Compatibilidad con antiguo /delete?id=3
 router.delete('/delete', async (req, res) => {
     const id = Number(req.query.id);
     if (!Number.isInteger(id)) {
@@ -54,6 +112,23 @@ router.delete('/delete', async (req, res) => {
     } catch (e) {
         console.error(e);
         res.status(500).send('Error al eliminar finca');
+    }
+});
+
+// Actualizar finca
+router.put('/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Id inválido');
+    }
+
+    try {
+        const finca = { ...req.body, IdFinca: id };
+        await fincaController.actualizarFinca(finca as any);
+        res.json({ message: 'Finca actualizada correctamente' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al actualizar finca');
     }
 });
 

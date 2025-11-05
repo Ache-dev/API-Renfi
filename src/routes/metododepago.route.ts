@@ -42,6 +42,23 @@ router.post('/', async (req, res) => {
 });
 
 // Ahora acepta DELETE /delete?id=3
+// DELETE por id en path
+router.delete('/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Id inválido');
+    }
+
+    try {
+        await metodoController.eliminarPorId(id);
+        res.json({ message: 'Método de pago eliminado correctamente' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al eliminar método de pago');
+    }
+});
+
+// Compatibilidad con antiguo /delete?id=3
 router.delete('/delete', async (req, res) => {
     const id = Number(req.query.id);
     if (!Number.isInteger(id)) {
@@ -54,6 +71,23 @@ router.delete('/delete', async (req, res) => {
     } catch (e) {
         console.error(e);
         res.status(500).send('Error al eliminar método de pago');
+    }
+});
+
+// Actualizar método de pago
+router.put('/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+        return res.status(400).send('Id inválido');
+    }
+
+    try {
+        const metodo = { ...req.body, IdMetodoDePago: id };
+        await metodoController.actualizarMetodo(metodo as any);
+        res.json({ message: 'Método de pago actualizado correctamente' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error al actualizar método de pago');
     }
 });
 

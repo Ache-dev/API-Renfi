@@ -1,13 +1,15 @@
 export interface Finca {
-    IdFinca: number;
+    IdFinca?: number;
     IdMunicipio?: number;
-    IdImagen?: number;
+    NumeroDocumentoUsuario?: number;
     NombreFinca?: string;
     Direccion?: string;
     InformacionAdicional?: string;
     Capacidad?: number;
     Precio?: number;
-    Estado?: boolean;
+    Estado?: string; // 'Disponible' | 'No Disponible' | 'Mantenimiento'
     Calificacion?: number;
-    UsuarioId?: number;
+    // Campos adicionales para listados que hacen JOIN
+    NombreMunicipio?: string;
+    Dueno?: string;
 }

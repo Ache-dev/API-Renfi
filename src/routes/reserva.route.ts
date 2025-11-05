@@ -1,60 +1,31 @@
+import { Router } from 'express';
 import * as reservaController from '../controllers/reserva.controller';
-import express from 'express';
 
-const router = express.Router();
+const router = Router();
 
-router.get('/', async (_, res) => {
-    try {
-        const reservas = await reservaController.getReservas();
-        res.json(reservas);
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al obtener reservas');
-    }
-});
+// Listar reservas
+router.get('/', reservaController.listar);
 
-router.get('/:id', async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-    try {
-        const reserva = await reservaController.buscarPorId(id);
-        if (reserva) {
-            res.json(reserva);
-        } else {
-            res.status(404).send('Reserva no encontrada');
-        }
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al buscar reserva');
-    }
-});
-
-router.post('/', async (req, res) => {
-    try {
-        await reservaController.crearReserva(req.body);
-        res.status(201).json({ message: 'Reserva creada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al crear reserva');
-    }
-});
-
-// Ahora acepta DELETE /delete?id=3
-router.delete('/delete', async (req, res) => {
+// Compatibilidad con DELETE /delete?id=3 (debe ir antes de '/:id')
+router.delete('/delete', (req, res) => {
     const id = Number(req.query.id);
     if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
+        return res.status(400).json({ message: 'Id inválido' });
     }
-
-    try {
-        await reservaController.eliminarPorId(id);
-        res.json({ message: 'Reserva eliminada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al eliminar reserva');
-    }
+    (req as any).params = { id: String(id) };
+    return reservaController.eliminar(req as any, res);
 });
+
+// Obtener por id
+router.get('/:id', reservaController.buscarPorId);
+
+// Crear reserva
+router.post('/', reservaController.crear);
+
+// Actualizar reserva
+router.put('/:id', reservaController.actualizar);
+
+// Eliminar/cancelar reserva
+router.delete('/:id', reservaController.eliminar);
 
 export default router;
