@@ -28,6 +28,7 @@ export const insertar = async (reserva: Reserva): Promise<number> => {
 
         const result = await pool.request()
             .input('IdFinca', sql.Int, reserva.IdFinca)
+            .input('NumeroDocumentoUsuario', sql.Int, reserva.NumeroDocumentoUsuario || null)
             .input('FechaReserva', sql.DateTime, fechaReserva)
             .input('FechaEntrada', sql.DateTime, fechaEntrada)
             .input('FechaSalida', sql.DateTime, fechaSalida)
@@ -36,8 +37,8 @@ export const insertar = async (reserva: Reserva): Promise<number> => {
             .query(`
                 DECLARE @IdReserva INT;
                 
-                INSERT INTO Reserva (IdFinca, FechaReserva, FechaEntrada, FechaSalida, MontoReserva, Estado)
-                VALUES (@IdFinca, @FechaReserva, @FechaEntrada, @FechaSalida, @MontoReserva, @Estado);
+                INSERT INTO Reserva (IdFinca, NumeroDocumentoUsuario, FechaReserva, FechaEntrada, FechaSalida, MontoReserva, Estado)
+                VALUES (@IdFinca, @NumeroDocumentoUsuario, @FechaReserva, @FechaEntrada, @FechaSalida, @MontoReserva, @Estado);
                 
                 SET @IdReserva = SCOPE_IDENTITY();
                 SELECT @IdReserva AS IdReserva;
@@ -62,6 +63,7 @@ export const actualizar = async (reserva: Reserva): Promise<void> => {
         await pool.request()
             .input('IdReserva', sql.Int, reserva.IdReserva)
             .input('IdFinca', sql.Int, reserva.IdFinca)
+            .input('NumeroDocumentoUsuario', sql.Int, reserva.NumeroDocumentoUsuario || null)
             .input('FechaReserva', sql.DateTime, fechaReserva)
             .input('FechaEntrada', sql.DateTime, fechaEntrada)
             .input('FechaSalida', sql.DateTime, fechaSalida)
@@ -93,6 +95,45 @@ export const buscarPorId = async (id: number): Promise<Reserva | null> => {
                 SELECT 
                     R.IdReserva, 
                     R.IdFinca, 
+                    R.NumeroDocumentoUsuario,
+                    R.FechaReserva, 
+                    R.FechaEntrada, 
+                    R.FechaSalida, 
+                    R.Estado, 
+                    R.MontoReserva, 
+                    F.NombreFinca, 
+                    F.Precio, 
+                    F.Estado AS EstadoFinca,
+                    M.NombreMunicipio,
+                    U.NumeroDocumento AS IdPropietario,
+                    U.NombreUsuario AS NombrePropietario,
+                    U.ApellidoUsuario AS ApellidoPropietario,
+                    C.NombreUsuario AS NombreCliente,
+                    C.ApellidoUsuario AS ApellidoCliente,
+                    C.Telefono AS TelefonoCliente
+                FROM Reserva R 
+                LEFT JOIN Finca F ON R.IdFinca = F.IdFinca 
+                LEFT JOIN Municipio M ON F.IdMunicipio = M.IdMunicipio
+                LEFT JOIN Usuario U ON F.NumeroDocumentoUsuario = U.NumeroDocumento
+                LEFT JOIN Usuario C ON R.NumeroDocumentoUsuario = C.NumeroDocumento
+                WHERE R.IdReserva = @IdReserva
+            `);
+        return rs?.recordset?.[0] ?? null;
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const listarPorUsuario = async (numeroDocumento: number): Promise<Reserva[]> => {
+    try {
+        const pool = await getConnection();
+        const rs = await pool.request()
+            .input('NumeroDocumento', sql.Int, numeroDocumento)
+            .query(`
+                SELECT 
+                    R.IdReserva, 
+                    R.IdFinca, 
+                    R.NumeroDocumentoUsuario,
                     R.FechaReserva, 
                     R.FechaEntrada, 
                     R.FechaSalida, 
@@ -108,10 +149,11 @@ export const buscarPorId = async (id: number): Promise<Reserva | null> => {
                 FROM Reserva R 
                 LEFT JOIN Finca F ON R.IdFinca = F.IdFinca 
                 LEFT JOIN Municipio M ON F.IdMunicipio = M.IdMunicipio
-                LEFT JOIN Usuario U ON F.NumeroDocumentoUsuario = U.NumeroDocumento 
-                WHERE R.IdReserva = @IdReserva
+                LEFT JOIN Usuario U ON F.NumeroDocumentoUsuario = U.NumeroDocumento
+                WHERE R.NumeroDocumentoUsuario = @NumeroDocumento
+                ORDER BY R.FechaReserva DESC
             `);
-        return rs?.recordset?.[0] ?? null;
+        return (rs?.recordset as Reserva[]) ?? [];
     } catch (error) {
         throw error;
     }

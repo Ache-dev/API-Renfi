@@ -20,6 +20,10 @@ const parseReservaFromRequest = (body: any, idReserva?: number): Reserva => {
         MontoReserva: Number(body.MontoReserva)
     };
     
+    if (body.NumeroDocumentoUsuario) {
+        reserva.NumeroDocumentoUsuario = Number(body.NumeroDocumentoUsuario);
+    }
+    
     if (idReserva !== undefined) {
         reserva.IdReserva = idReserva;
     }
@@ -66,12 +70,12 @@ export const buscarPorId = async (req: Request, res: Response): Promise<void> =>
 
 export const crear = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { IdFinca, FechaEntrada, FechaSalida, MontoReserva } = req.body;
+        const { IdFinca, NumeroDocumentoUsuario, FechaEntrada, FechaSalida, MontoReserva } = req.body;
 
-        if (!IdFinca || !FechaEntrada || !FechaSalida || !MontoReserva) {
+        if (!IdFinca || !NumeroDocumentoUsuario || !FechaEntrada || !FechaSalida || !MontoReserva) {
             res.status(400).json({
                 message: 'Faltan campos obligatorios',
-                required: ['IdFinca', 'FechaEntrada', 'FechaSalida', 'MontoReserva']
+                required: ['IdFinca', 'NumeroDocumentoUsuario', 'FechaEntrada', 'FechaSalida', 'MontoReserva']
             });
             return;
         }
@@ -89,7 +93,6 @@ export const crear = async (req: Request, res: Response): Promise<void> => {
         const reservaPayload = parseReservaFromRequest(req.body);
         const nuevoId = await reservaDao.insertar(reservaPayload);
 
-        // Crear la factura automáticamente
         let idFactura: number | undefined;
         try {
             const factura: Factura = {
@@ -100,11 +103,8 @@ export const crear = async (req: Request, res: Response): Promise<void> => {
             };
             idFactura = await facturaDao.insertar(factura);
         } catch (facturaError) {
-            console.error('Error al crear factura:', facturaError);
-            // Continuar sin factura si falla
         }
 
-        // Obtener la reserva completa con todos los detalles de la finca
         const reservaCompleta = await reservaDao.buscarPorId(nuevoId);
 
         const payload = {
@@ -113,11 +113,11 @@ export const crear = async (req: Request, res: Response): Promise<void> => {
             id: nuevoId,
             idReserva: nuevoId,
             IdFactura: idFactura,
-            reserva: reservaCompleta, // Incluir toda la información de la reserva y finca
+            reserva: reservaCompleta,
             data: { 
                 IdReserva: nuevoId,
                 IdFactura: idFactura,
-                ...reservaCompleta // Spread de todos los datos
+                ...reservaCompleta
             }
         };
 
@@ -171,6 +171,7 @@ export const actualizar = async (req: Request, res: Response): Promise<void> => 
 export const eliminar = async (req: Request, res: Response): Promise<void> => {
     try {
         const id = Number(req.params.id);
+        
         if (!Number.isInteger(id)) {
             res.status(400).json({ message: 'ID inválido' });
             return;
@@ -184,11 +185,32 @@ export const eliminar = async (req: Request, res: Response): Promise<void> => {
 
         await reservaDao.eliminarPorId(id);
 
-        res.status(200).json({ message: 'Reserva cancelada correctamente' });
+        res.status(200).json({ 
+            message: 'Reserva cancelada correctamente'
+        });
     } catch (error) {
         console.error('Error al eliminar reserva:', error);
         res.status(500).json({
             message: 'Error al eliminar reserva',
+            error: error instanceof Error ? error.message : 'Error desconocido'
+        });
+    }
+};
+
+export const listarPorUsuario = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const numeroDocumento = Number(req.params.numeroDocumento);
+        if (!Number.isInteger(numeroDocumento)) {
+            res.status(400).json({ message: 'Número de documento inválido' });
+            return;
+        }
+
+        const reservas = await reservaDao.listarPorUsuario(numeroDocumento);
+        res.status(200).json(reservas);
+    } catch (error) {
+        console.error('Error al listar reservas por usuario:', error);
+        res.status(500).json({
+            message: 'Error al listar reservas por usuario',
             error: error instanceof Error ? error.message : 'Error desconocido'
         });
     }

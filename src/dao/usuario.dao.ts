@@ -74,3 +74,21 @@ export const buscarPorId = async (numeroDocumento: number): Promise<Usuario | nu
         throw error;
     }
 };
+
+export const login = async (correo: string, contrasena: string): Promise<Usuario | null> => {
+    try {
+        const pool = await getConnection();
+        const rs = await pool.request()
+            .input('Correo', correo)
+            .input('Contrasena', contrasena)
+            .execute('SP_IniciarSesion');
+        
+        if (rs && rs.recordset && rs.recordset.length > 0) {
+            const usuario = rs.recordset[0] as Usuario;
+            return usuario;
+        }
+        return null;
+    } catch (error) {
+        throw error;
+    }
+};

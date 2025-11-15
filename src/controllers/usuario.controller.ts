@@ -48,3 +48,21 @@ export const buscarPorId = async (id: number): Promise<Usuario | null> => {
         throw error;
     }
 };
+
+export const login = async (correo: string, contrasena: string): Promise<Usuario | null> => {
+    try {
+        if (!correo || !contrasena) {
+            throw new Error('Correo y contraseña son requeridos');
+        }
+        
+        const usuario = await usuarioDao.login(correo, contrasena);
+        
+        if (!usuario) {
+            throw new Error('Credenciales inválidas o usuario inactivo');
+        }
+        
+        return usuario;
+    } catch (error) {
+        throw error;
+    }
+};

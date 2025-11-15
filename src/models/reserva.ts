@@ -1,6 +1,7 @@
 export interface Reserva {
     IdReserva?: number;
     IdFinca: number;
+    NumeroDocumentoUsuario?: number; // Usuario que hace la reserva
     FechaReserva?: Date | string;
     FechaEntrada: Date | string;
     FechaSalida: Date | string;
@@ -15,4 +16,8 @@ export interface Reserva {
     IdPropietario?: number;
     NombrePropietario?: string;
     ApellidoPropietario?: string;
+    // Datos del cliente que reserva
+    NombreCliente?: string;
+    ApellidoCliente?: string;
+    TelefonoCliente?: string;
 }
