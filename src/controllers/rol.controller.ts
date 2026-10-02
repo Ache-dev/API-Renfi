@@ -1,48 +1,82 @@
-import * as rolDao from '../dao/rol.dao';
-import { Rol } from '../models/rol';
+import { Request, Response, NextFunction } from 'express';
+import * as rolService from '../services/rol.service';
+import { AppError } from '../middlewares/error.middleware';
 
-export const getRoles = async (): Promise<Rol[]> => {
+/**
+ * Obtiene todos los roles.
+ */
+export const getRoles = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await rolDao.listar();
+        const roles = await rolService.getRoles();
+        res.status(200).json(roles);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const crearRol = async (rol: Rol): Promise<void> => {
+/**
+ * Busca un rol por su ID.
+ */
+export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!rol.NombreRol) {
-            throw new Error('Faltan campos requeridos para crear rol');
+        const id = Number(req.params.id);
+        const rol = await rolService.buscarPorId(id);
+
+        if (!rol) {
+            throw new AppError(`Rol con ID ${id} no encontrado`, 404);
         }
-        await rolDao.insertar(rol);
+
+        res.status(200).json(rol);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const actualizarRol = async (rol: Rol): Promise<void> => {
+/**
+ * Crea un nuevo rol.
+ */
+export const crearRol = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!rol.IdRol) {
-            throw new Error('IdRol es requerido para actualizar');
-        }
-        await rolDao.actualizar(rol);
+        const resultado = await rolService.crearRol(req.body);
+        res.status(201).json({
+            message: 'Rol creado correctamente',
+            id: resultado.id,
+            IdRol: resultado.IdRol,
+            rol: resultado.rol
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const eliminarPorId = async (id: number): Promise<void> => {
+/**
+ * Actualiza un rol existente.
+ */
+export const actualizarRol = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await rolDao.eliminarPorId(id);
+        const id = Number(req.params.id);
+        const actualizado = await rolService.actualizarRol(id, req.body);
+        res.status(200).json({
+            message: 'Rol actualizado correctamente',
+            rol: actualizado
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const buscarPorId = async (id: number): Promise<Rol | null> => {
+/**
+ * Elimina un rol por su ID.
+ */
+export const eliminarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await rolDao.buscarPorId(id);
+        const id = Number(req.params.id);
+        await rolService.eliminarPorId(id);
+        res.status(200).json({
+            message: 'Rol eliminado correctamente'
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
+

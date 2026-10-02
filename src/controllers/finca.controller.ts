@@ -1,91 +1,119 @@
-import * as fincaDao from '../dao/finca.dao';
-import { Finca } from '../models/finca';
-import {
-    fincasMasReservadas,
-    promedioCalificacionFincas,
-    totalIngresosPorFinca,
-    fincasConMasIngresos,
-    FincaReservada,
-    FincaPromedioCalificacion,
-    FincaIngresos,
-    FincaIngresosTop
-} from '../dao/finca.dao';
+import { Request, Response, NextFunction } from 'express';
+import * as fincaService from '../services/finca.service';
+import { AppError } from '../middlewares/error.middleware';
 
-export const getFincas = async (): Promise<Finca[]> => {
+/**
+ * Obtiene el listado de todas las fincas.
+ */
+export const getFincas = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await fincaDao.listar();
+        const fincas = await fincaService.getFincas();
+        res.status(200).json(fincas);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const crearFinca = async (finca: Finca): Promise<void> => {
+/**
+ * Busca una finca por su identificador.
+ */
+export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!finca.IdMunicipio || !finca.NumeroDocumentoUsuario || !finca.NombreFinca) {
-            throw new Error('Faltan campos requeridos para crear finca');
+        const id = Number(req.params.id);
+        const finca = await fincaService.buscarPorId(id);
+
+        if (!finca) {
+            throw new AppError(`Finca con ID ${id} no encontrada`, 404);
         }
-        await fincaDao.insertar(finca);
+
+        res.status(200).json(finca);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const actualizarFinca = async (finca: Finca): Promise<void> => {
+/**
+ * Crea una nueva finca.
+ */
+export const crearFinca = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!finca.IdFinca) {
-            throw new Error('IdFinca es requerido para actualizar');
-        }
-        await fincaDao.actualizar(finca);
+        const resultado = await fincaService.crearFinca(req.body);
+        res.status(201).json({
+            message: 'Finca creada correctamente',
+            id: resultado.id,
+            IdFinca: resultado.id,
+            finca: resultado.finca
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const eliminarPorId = async (id: number): Promise<void> => {
+/**
+ * Actualiza los datos de una finca existente.
+ */
+export const actualizarFinca = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await fincaDao.eliminarPorId(id);
+        const id = Number(req.params.id);
+        const actualizada = await fincaService.actualizarFinca(id, req.body);
+        res.status(200).json({
+            message: 'Finca actualizada correctamente',
+            finca: actualizada
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const buscarPorId = async (id: number): Promise<Finca | null> => {
+/**
+ * Elimina una finca por su identificador.
+ */
+export const eliminarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await fincaDao.buscarPorId(id);
+        const id = Number(req.params.id);
+        await fincaService.eliminarPorId(id);
+        res.status(200).json({
+            message: 'Finca eliminada correctamente'
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-// Reportes y estadísticas
-export const getFincasMasReservadas = async (): Promise<FincaReservada[]> => {
+// Reportes
+export const getFincasMasReservadas = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await fincasMasReservadas();
+        const data = await fincaService.getFincasMasReservadas();
+        res.status(200).json(data);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const getPromedioCalificacionFincas = async (): Promise<FincaPromedioCalificacion[]> => {
+export const getPromedioCalificacionFincas = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await promedioCalificacionFincas();
+        const data = await fincaService.getPromedioCalificacionFincas();
+        res.status(200).json(data);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const getTotalIngresosPorFinca = async (): Promise<FincaIngresos[]> => {
+export const getTotalIngresosPorFinca = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await totalIngresosPorFinca();
+        const data = await fincaService.getTotalIngresosPorFinca();
+        res.status(200).json(data);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const getFincasConMasIngresos = async (): Promise<FincaIngresosTop[]> => {
+export const getFincasConMasIngresos = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await fincasConMasIngresos();
+        const data = await fincaService.getFincasConMasIngresos();
+        res.status(200).json(data);
     } catch (error) {
-        throw error;
+        next(error);
     }
+};
 };

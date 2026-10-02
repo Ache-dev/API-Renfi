@@ -1,27 +1,23 @@
 import { Router } from 'express';
 import * as reservaController from '../controllers/reserva.controller';
+import { validarId } from '../middlewares/validate-id.middleware';
 
 const router = Router();
 
+// Consultas
 router.get('/', reservaController.listar);
-
 router.get('/usuario/:numeroDocumento', reservaController.listarPorUsuario);
 
-router.delete('/delete', (req, res) => {
-    const id = Number(req.query.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).json({ message: 'Id inválido' });
-    }
-    (req as any).params = { id: String(id) };
-    return reservaController.eliminar(req as any, res);
-});
-
-router.get('/:id', reservaController.buscarPorId);
-
+// Inserción
 router.post('/', reservaController.crear);
 
-router.put('/:id', reservaController.actualizar);
+// Compatibilidad con DELETE por query param: /api/reserva/delete?id=3
+router.delete('/delete', validarId, reservaController.eliminar);
 
-router.delete('/:id', reservaController.eliminar);
+// Operaciones por ID
+router.get('/:id', validarId, reservaController.buscarPorId);
+router.put('/:id', validarId, reservaController.actualizar);
+router.delete('/:id', validarId, reservaController.eliminar);
 
+export default router;
 export default router;

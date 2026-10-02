@@ -1,48 +1,82 @@
-import * as metodoDao from '../dao/metododepago.dao';
-import { MetodoDePago } from '../models/metododepago';
+import { Request, Response, NextFunction } from 'express';
+import * as metodoService from '../services/metododepago.service';
+import { AppError } from '../middlewares/error.middleware';
 
-export const getMetodos = async (): Promise<MetodoDePago[]> => {
+/**
+ * Obtiene todos los métodos de pago.
+ */
+export const getMetodos = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await metodoDao.listar();
+        const metodos = await metodoService.getMetodos();
+        res.status(200).json(metodos);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const crearMetodo = async (metodo: MetodoDePago): Promise<void> => {
+/**
+ * Busca un método de pago por su ID.
+ */
+export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!metodo.NombreMetodoDePago) {
-            throw new Error('Faltan campos requeridos para crear método de pago');
+        const id = Number(req.params.id);
+        const metodo = await metodoService.buscarPorId(id);
+
+        if (!metodo) {
+            throw new AppError(`Método de pago con ID ${id} no encontrado`, 404);
         }
-        await metodoDao.insertar(metodo);
+
+        res.status(200).json(metodo);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const actualizarMetodo = async (metodo: MetodoDePago): Promise<void> => {
+/**
+ * Crea un nuevo método de pago.
+ */
+export const crearMetodo = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!metodo.IdMetodoDePago) {
-            throw new Error('IdMetodoDePago es requerido para actualizar');
-        }
-        await metodoDao.actualizar(metodo);
+        const resultado = await metodoService.crearMetodo(req.body);
+        res.status(201).json({
+            message: 'Método de pago creado correctamente',
+            id: resultado.id,
+            IdMetodoDePago: resultado.IdMetodoDePago,
+            metodo: resultado.metodo
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const eliminarPorId = async (id: number): Promise<void> => {
+/**
+ * Actualiza un método de pago existente.
+ */
+export const actualizarMetodo = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await metodoDao.eliminarPorId(id);
+        const id = Number(req.params.id);
+        const actualizado = await metodoService.actualizarMetodo(id, req.body);
+        res.status(200).json({
+            message: 'Método de pago actualizado correctamente',
+            metodo: actualizado
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const buscarPorId = async (id: number): Promise<MetodoDePago | null> => {
+/**
+ * Elimina un método de pago por su ID.
+ */
+export const eliminarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await metodoDao.buscarPorId(id);
+        const id = Number(req.params.id);
+        await metodoService.eliminarPorId(id);
+        res.status(200).json({
+            message: 'Método de pago eliminado correctamente'
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
+};
 };

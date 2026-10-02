@@ -1,56 +1,99 @@
-import * as imagenDao from '../dao/imagen.dao';
-import { Imagen } from '../models/imagen';
+import { Request, Response, NextFunction } from 'express';
+import * as imagenService from '../services/imagen.service';
+import { AppError } from '../middlewares/error.middleware';
 
-export const getImagenesPorIdFinca = async (idFinca: number): Promise<Imagen[]> => {
+/**
+ * Obtiene todas las imágenes.
+ */
+export const getImagenes = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await imagenDao.buscarPorIdFinca(idFinca);
+        const imagenes = await imagenService.getImagenes();
+        res.status(200).json(imagenes);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const getImagenes = async (): Promise<Imagen[]> => {
+/**
+ * Obtiene todas las imágenes de una finca específica.
+ */
+export const getImagenesPorIdFinca = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await imagenDao.listar();
-    } catch (error) {
-        throw error;
-    }
-};
-
-export const crearImagen = async (imagen: Imagen): Promise<void> => {
-    try {
-        if (!imagen.UrlImagen || !imagen.IdFinca) {
-            throw new Error('Faltan campos requeridos para crear imagen');
+        const idFinca = Number(req.params.id);
+        if (!Number.isInteger(idFinca) || idFinca <= 0) {
+            throw new AppError('IdFinca inválido', 400);
         }
-        await imagenDao.insertar(imagen);
+
+        const imagenes = await imagenService.getImagenesPorIdFinca(idFinca);
+        res.status(200).json(imagenes);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const actualizarImagen = async (imagen: Imagen): Promise<void> => {
+/**
+ * Busca una imagen por su ID.
+ */
+export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!imagen.IdImagen) {
-            throw new Error('IdImagen es requerido para actualizar');
+        const id = Number(req.params.id);
+        const imagen = await imagenService.buscarPorId(id);
+
+        if (!imagen) {
+            throw new AppError(`Imagen con ID ${id} no encontrada`, 404);
         }
-        await imagenDao.actualizar(imagen);
+
+        res.status(200).json(imagen);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const eliminarPorId = async (id: number): Promise<void> => {
+/**
+ * Crea una nueva imagen.
+ */
+export const crearImagen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await imagenDao.eliminarPorId(id);
+        const resultado = await imagenService.crearImagen(req.body);
+        res.status(201).json({
+            message: 'Imagen creada correctamente',
+            id: resultado.id,
+            IdImagen: resultado.IdImagen,
+            imagen: resultado.imagen
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const buscarPorId = async (id: number): Promise<Imagen | null> => {
+/**
+ * Actualiza una imagen existente.
+ */
+export const actualizarImagen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await imagenDao.buscarPorId(id);
+        const id = Number(req.params.id);
+        const actualizada = await imagenService.actualizarImagen(id, req.body);
+        res.status(200).json({
+            message: 'Imagen actualizada correctamente',
+            imagen: actualizada
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
+};
+
+/**
+ * Elimina una imagen por su ID.
+ */
+export const eliminarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const id = Number(req.params.id);
+        await imagenService.eliminarPorId(id);
+        res.status(200).json({
+            message: 'Imagen eliminada correctamente'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 };

@@ -1,135 +1,25 @@
+import { Router } from 'express';
 import * as fincaController from '../controllers/finca.controller';
-import express from 'express';
+import { validarId } from '../middlewares/validate-id.middleware';
 
-const router = express.Router();
+const router = Router();
 
-router.get('/', async (_, res) => {
-    try {
-        const fincas = await fincaController.getFincas();
-        res.json(fincas);
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al obtener fincas');
-    }
-});
+// Endpoints de reportes y estadísticas (deben declararse antes de /:id)
+router.get('/report/mas-reservadas', fincaController.getFincasMasReservadas);
+router.get('/report/promedio-calificacion', fincaController.getPromedioCalificacionFincas);
+router.get('/report/total-ingresos', fincaController.getTotalIngresosPorFinca);
+router.get('/report/mas-ingresos', fincaController.getFincasConMasIngresos);
 
-// Endpoints de reportes y estadísticas
-router.get('/report/mas-reservadas', async (_, res) => {
-    try {
-        const data = await fincaController.getFincasMasReservadas();
-        res.json(data);
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al obtener fincas más reservadas');
-    }
-});
+// CRUD de Fincas
+router.get('/', fincaController.getFincas);
+router.post('/', fincaController.crearFinca);
 
-router.get('/report/promedio-calificacion', async (_, res) => {
-    try {
-        const data = await fincaController.getPromedioCalificacionFincas();
-        res.json(data);
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al obtener promedio de calificación');
-    }
-});
+// Compatibilidad con DELETE por query param: /api/finca/delete?id=3
+router.delete('/delete', validarId, fincaController.eliminarPorId);
 
-router.get('/report/total-ingresos', async (_, res) => {
-    try {
-        const data = await fincaController.getTotalIngresosPorFinca();
-        res.json(data);
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al obtener total de ingresos por finca');
-    }
-});
+router.get('/:id', validarId, fincaController.buscarPorId);
+router.put('/:id', validarId, fincaController.actualizarFinca);
+router.delete('/:id', validarId, fincaController.eliminarPorId);
 
-router.get('/report/mas-ingresos', async (_, res) => {
-    try {
-        const data = await fincaController.getFincasConMasIngresos();
-        res.json(data);
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al obtener fincas con más ingresos');
-    }
-});
-
-router.get('/:id', async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-    try {
-        const finca = await fincaController.buscarPorId(id);
-        if (finca) {
-            res.json(finca);
-        } else {
-            res.status(404).send('Finca no encontrada');
-        }
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al buscar finca');
-    }
-});
-
-router.post('/', async (req, res) => {
-    try {
-        await fincaController.crearFinca(req.body);
-        res.status(201).json({ message: 'Finca creada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al crear finca');
-    }
-});
-
-// Ahora acepta DELETE /delete?id=3
-// DELETE por id en path
-router.delete('/:id', async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-
-    try {
-        await fincaController.eliminarPorId(id);
-        res.json({ message: 'Finca eliminada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al eliminar finca');
-    }
-});
-
-// Compatibilidad con antiguo /delete?id=3
-router.delete('/delete', async (req, res) => {
-    const id = Number(req.query.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-
-    try {
-        await fincaController.eliminarPorId(id);
-        res.json({ message: 'Finca eliminada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al eliminar finca');
-    }
-});
-
-// Actualizar finca
-router.put('/:id', async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-
-    try {
-        const finca = { ...req.body, IdFinca: id };
-        await fincaController.actualizarFinca(finca as any);
-        res.json({ message: 'Finca actualizada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al actualizar finca');
-    }
-});
-
+export default router;
 export default router;

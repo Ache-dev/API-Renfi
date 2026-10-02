@@ -1,49 +1,83 @@
-import * as facturaDao from '../dao/factura.dao';
-import { Factura } from '../models/factura';
+import { Request, Response, NextFunction } from 'express';
+import * as facturaService from '../services/factura.service';
+import { AppError } from '../middlewares/error.middleware';
 
-export const getFacturas = async (): Promise<Factura[]> => {
+/**
+ * Obtiene todas las facturas.
+ */
+export const getFacturas = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await facturaDao.listar();
+        const facturas = await facturaService.getFacturas();
+        res.status(200).json(facturas);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const crearFactura = async (factura: Factura): Promise<number> => {
+/**
+ * Busca una factura por su ID.
+ */
+export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!factura.IdReserva || !factura.Total) {
-            throw new Error('Faltan campos requeridos para crear factura');
+        const id = Number(req.params.id);
+        const factura = await facturaService.buscarPorId(id);
+
+        if (!factura) {
+            throw new AppError(`Factura con ID ${id} no encontrada`, 404);
         }
-        const idFactura = await facturaDao.insertar(factura);
-        return idFactura;
+
+        res.status(200).json(factura);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const actualizarFactura = async (factura: Factura): Promise<void> => {
+/**
+ * Crea una nueva factura.
+ */
+export const crearFactura = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!factura.IdFactura) {
-            throw new Error('IdFactura es requerido para actualizar');
-        }
-        await facturaDao.actualizar(factura);
+        const resultado = await facturaService.crearFactura(req.body);
+        res.status(201).json({
+            message: 'Factura creada correctamente',
+            id: resultado.id,
+            IdFactura: resultado.IdFactura,
+            idFactura: resultado.idFactura,
+            factura: resultado.factura
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const eliminarPorId = async (id: number): Promise<void> => {
+/**
+ * Actualiza una factura existente.
+ */
+export const actualizarFactura = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await facturaDao.eliminarPorId(id);
+        const id = Number(req.params.id);
+        const actualizada = await facturaService.actualizarFactura(id, req.body);
+        res.status(200).json({
+            message: 'Factura actualizada correctamente',
+            factura: actualizada
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const buscarPorId = async (id: number): Promise<Factura | null> => {
+/**
+ * Elimina una factura por su ID.
+ */
+export const eliminarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await facturaDao.buscarPorId(id);
+        const id = Number(req.params.id);
+        await facturaService.eliminarPorId(id);
+        res.status(200).json({
+            message: 'Factura eliminada correctamente'
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
+

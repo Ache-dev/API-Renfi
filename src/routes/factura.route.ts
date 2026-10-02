@@ -1,97 +1,18 @@
-﻿import * as facturaController from '../controllers/factura.controller';
-import express from 'express';
+import { Router } from 'express';
+import * as facturaController from '../controllers/factura.controller';
+import { validarId } from '../middlewares/validate-id.middleware';
 
-const router = express.Router();
+const router = Router();
 
-router.get('/', async (_, res) => {
-    try {
-        const facturas = await facturaController.getFacturas();
-        res.json(facturas);
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al obtener facturas');
-    }
-});
+router.get('/', facturaController.getFacturas);
+router.post('/', facturaController.crearFactura);
 
-router.get('/:id', async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-    try {
-        const factura = await facturaController.buscarPorId(id);
-        if (factura) {
-            res.json(factura);
-        } else {
-            res.status(404).send('Factura no encontrada');
-        }
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al buscar factura');
-    }
-});
+// Compatibilidad con DELETE por query param: /api/factura/delete?id=3
+router.delete('/delete', validarId, facturaController.eliminarPorId);
 
-router.post('/', async (req, res) => {
-    try {
-        const idFactura = await facturaController.crearFactura(req.body);
-        res.status(201).json({ 
-            message: 'Factura creada correctamente',
-            IdFactura: idFactura,
-            id: idFactura
-        });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ 
-            message: 'Error al crear factura',
-            error: e instanceof Error ? e.message : 'Error desconocido'
-        });
-    }
-});
-
-router.delete('/:id', async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-
-    try {
-        await facturaController.eliminarPorId(id);
-        res.json({ message: 'Factura eliminada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al eliminar factura');
-    }
-});
-
-router.delete('/delete', async (req, res) => {
-    const id = Number(req.query.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-
-    try {
-        await facturaController.eliminarPorId(id);
-        res.json({ message: 'Factura eliminada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al eliminar factura');
-    }
-});
-
-router.put('/:id', async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-        return res.status(400).send('Id inválido');
-    }
-
-    try {
-        const factura = { ...req.body, IdFactura: id };
-        await facturaController.actualizarFactura(factura as any);
-        res.json({ message: 'Factura actualizada correctamente' });
-    } catch (e) {
-        console.error(e);
-        res.status(500).send('Error al actualizar factura');
-    }
-});
+router.get('/:id', validarId, facturaController.buscarPorId);
+router.put('/:id', validarId, facturaController.actualizarFactura);
+router.delete('/:id', validarId, facturaController.eliminarPorId);
 
 export default router;
+

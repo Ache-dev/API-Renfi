@@ -1,68 +1,103 @@
-import * as usuarioDao from '../dao/usuario.dao';
-import { Usuario } from '../models/usuario';
+import { Request, Response, NextFunction } from 'express';
+import * as usuarioService from '../services/usuario.service';
+import { AppError } from '../middlewares/error.middleware';
 
-export const getUsuarios = async (): Promise<Usuario[]> => {
+/**
+ * Controlador de autenticación: login de usuario.
+ */
+export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const usuarios = await usuarioDao.listar();
-        return usuarios;
-    } catch (error) {
-        throw error;
-    }
-};
+        const correo = req.body.correo ?? req.body.Correo;
+        const contrasena = req.body.contrasena ?? req.body.Contrasena;
 
-export const crearUsuario = async (usuario: Usuario): Promise<void> => {
-    try {
-        // Validaciones mínimas de campos esperados por el SP
-        if (!usuario.NombreUsuario || !usuario.ApellidoUsuario || !usuario.Contrasena) {
-            throw new Error('Faltan campos requeridos para crear usuario');
-        }
-        await usuarioDao.insertar(usuario);
-    } catch (error) {
-        throw error;
-    }
-};
-
-export const actualizarUsuario = async (usuario: Usuario): Promise<void> => {
-    try {
-        if (!usuario.NumeroDocumento) {
-            throw new Error('NumeroDocumento es requerido para actualizar');
-        }
-        await usuarioDao.actualizar(usuario);
-    } catch (error) {
-        throw error;
-    }
-};
-
-export const eliminarPorId = async (id: number): Promise<void> => {
-    try {
-        await usuarioDao.eliminarPorId(id);
-    } catch (error) {
-        throw error;
-    }
-};
-
-export const buscarPorId = async (id: number): Promise<Usuario | null> => {
-    try {
-        return await usuarioDao.buscarPorId(id);
-    } catch (error) {
-        throw error;
-    }
-};
-
-export const login = async (correo: string, contrasena: string): Promise<Usuario | null> => {
-    try {
         if (!correo || !contrasena) {
-            throw new Error('Correo y contraseña son requeridos');
+            throw new AppError('Correo y contraseña son requeridos', 400);
         }
-        
-        const usuario = await usuarioDao.login(correo, contrasena);
-        
-        if (!usuario) {
-            throw new Error('Credenciales inválidas o usuario inactivo');
-        }
-        
-        return usuario;
+
+        const resultado = await usuarioService.login(correo, contrasena);
+        res.status(200).json(resultado);
     } catch (error) {
-        throw error;
+        next(error);
     }
+};
+
+/**
+ * Obtiene la lista de todos los usuarios.
+ */
+export const getUsuarios = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const usuarios = await usuarioService.getUsuarios();
+        res.status(200).json(usuarios);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Busca un usuario por su ID (número de documento).
+ */
+export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const id = Number(req.params.id);
+        const usuario = await usuarioService.buscarPorId(id);
+
+        if (!usuario) {
+            throw new AppError(`Usuario con ID ${id} no encontrado`, 404);
+        }
+
+        res.status(200).json(usuario);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Registra un nuevo usuario.
+ */
+export const crearUsuario = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const resultado = await usuarioService.crearUsuario(req.body);
+        res.status(201).json({
+            message: 'Usuario creado correctamente',
+            id: resultado.id,
+            NumeroDocumento: resultado.id,
+            IdUsuario: resultado.id,
+            usuario: resultado.usuario
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Actualiza los datos de un usuario.
+ */
+export const actualizarUsuario = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const id = Number(req.params.id);
+        const actualizado = await usuarioService.actualizarUsuario(id, req.body);
+        res.status(200).json({
+            message: 'Usuario actualizado correctamente',
+            usuario: actualizado,
+            ...actualizado
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Elimina un usuario por su ID.
+ */
+export const eliminarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const id = Number(req.params.id);
+        await usuarioService.eliminarPorId(id);
+        res.status(200).json({
+            message: 'Usuario eliminado correctamente'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 };

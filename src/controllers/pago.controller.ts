@@ -1,58 +1,95 @@
-import * as pagoDao from '../dao/pago.dao';
-import { Pago } from '../models/pago';
+import { Request, Response, NextFunction } from 'express';
+import * as pagoService from '../services/pago.service';
+import { AppError } from '../middlewares/error.middleware';
 
-export const getPagos = async (): Promise<Pago[]> => {
+/**
+ * Obtiene todos los pagos.
+ */
+export const getPagos = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await pagoDao.listar();
+        const pagos = await pagoService.getPagos();
+        res.status(200).json(pagos);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const crearPago = async (pago: Pago): Promise<void> => {
+/**
+ * Busca un pago por su ID.
+ */
+export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!pago.IdFactura || !pago.IdMetodoDePago || !pago.Monto || !pago.FechaPago || !pago.EstadoPago) {
-            throw new Error('Faltan campos requeridos para crear pago');
+        const id = Number(req.params.id);
+        const pago = await pagoService.buscarPorId(id);
+
+        if (!pago) {
+            throw new AppError(`Pago con ID ${id} no encontrado`, 404);
         }
-        await pagoDao.insertar(pago);
+
+        res.status(200).json(pago);
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const actualizarPago = async (pago: Pago): Promise<void> => {
+/**
+ * Registra un nuevo pago.
+ */
+export const crearPago = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!pago.IdPago) {
-            throw new Error('IdPago es requerido para actualizar');
-        }
-        await pagoDao.actualizar(pago);
+        const resultado = await pagoService.crearPago(req.body);
+        res.status(201).json({
+            message: 'Pago creado correctamente',
+            id: resultado.id,
+            IdPago: resultado.IdPago,
+            idPago: resultado.idPago,
+            pago: resultado.pago
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const eliminarPorId = async (id: number): Promise<void> => {
+/**
+ * Actualiza un pago existente.
+ */
+export const actualizarPago = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await pagoDao.eliminarPorId(id);
+        const id = Number(req.params.id);
+        const actualizado = await pagoService.actualizarPago(id, req.body);
+        res.status(200).json({
+            message: 'Pago actualizado correctamente',
+            pago: actualizado
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-export const buscarPorId = async (id: number): Promise<Pago | null> => {
+/**
+ * Elimina un pago por su ID.
+ */
+export const eliminarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await pagoDao.buscarPorId(id);
+        const id = Number(req.params.id);
+        await pagoService.eliminarPorId(id);
+        res.status(200).json({
+            message: 'Pago eliminado correctamente'
+        });
     } catch (error) {
-        throw error;
+        next(error);
     }
 };
 
-// Reporte: pagos pendientes
-import { pagosPendientes, PagoPendiente } from '../dao/pago.dao';
-export const getPagosPendientes = async (): Promise<PagoPendiente[]> => {
+/**
+ * Reporte: Pagos pendientes.
+ */
+export const getPagosPendientes = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        return await pagosPendientes();
+        const data = await pagoService.getPagosPendientes();
+        res.status(200).json(data);
     } catch (error) {
-        throw error;
+        next(error);
     }
+};
 };
