@@ -20,4 +20,3 @@ router.put('/:id', validarId, reservaController.actualizar);
 router.delete('/:id', validarId, reservaController.eliminar);
 
 export default router;
-export default router;

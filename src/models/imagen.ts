@@ -18,4 +18,3 @@ export interface ActualizarImagenDto {
     UrlImagen?: string;
     IdFinca?: number;
 }
-}

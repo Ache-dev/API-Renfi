@@ -13,15 +13,15 @@ export const envConfig = {
     NODE_ENV: process.env.NODE_ENV || 'development',
     PORT: Number(process.env.PORT) || 3000,
 
-    // Base de datos SQL Server
+    // Base de datos PostgreSQL / Supabase
     DB: {
-        USER: process.env.DB_USER || 'sa',
-        PASSWORD: process.env.DB_PASSWORD || 'Passw0rd!',
-        SERVER: process.env.DB_SERVER || 'localhost',
-        DATABASE: process.env.DB_DATABASE || 'Renfi',
-        PORT: Number(process.env.DB_PORT) || 1433,
-        ENCRYPT: process.env.DB_ENCRYPT !== 'false',
-        TRUST_SERVER_CERTIFICATE: process.env.DB_TRUST_SERVER_CERTIFICATE !== 'false'
+        CONNECTION_STRING: process.env.DATABASE_URL || '',
+        HOST: process.env.DB_HOST || process.env.PGHOST || 'localhost',
+        PORT: Number(process.env.DB_PORT || process.env.PGPORT) || 5432,
+        USER: process.env.DB_USER || process.env.PGUSER || 'postgres',
+        PASSWORD: process.env.DB_PASSWORD || process.env.PGPASSWORD || 'postgres',
+        DATABASE: process.env.DB_DATABASE || process.env.PGDATABASE || 'postgres',
+        SSL: process.env.DB_SSL === 'true' || (Boolean(process.env.DATABASE_URL) && !(process.env.DATABASE_URL || '').includes('localhost'))
     },
 
     // Seguridad y Autenticación JWT

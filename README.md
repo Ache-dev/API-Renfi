@@ -2,7 +2,7 @@
 
 Backend RESTful para la plataforma **Renfi**, una solución integral para la gestión y reserva de fincas vacacionales y turísticas. Esta API alimenta tanto la aplicación pública de usuarios como el panel de administración en Angular ([Renfi Frontend](https://github.com/Ache-dev/Renfi)).
 
-Desarrollado con **Node.js**, **Express 5**, **TypeScript** y **SQL Server**.
+Desarrollado con **Node.js**, **Express 5**, **TypeScript** y **PostgreSQL / Supabase**.
 
 ---
 
@@ -14,15 +14,16 @@ El proyecto sigue una arquitectura en capas desacopladas (**Layered Architecture
 API-Renfi/
 ├── .env                       # Variables de entorno locales
 ├── .env.example               # Plantilla de variables de entorno
-├── BD Renfi.sql               # Script DDL y Procedimientos Almacenados SQL Server
+├── supabase_schema.sql        # Esquema completo DDL, PL/pgSQL y Seed Data para Supabase
+├── BD Renfi.sql               # Script legado original SQL Server
 ├── package.json               # Dependencias y scripts de ejecución
 ├── tsconfig.json              # Configuración de TypeScript
 ├── src/
 │   ├── config/                # Configuración global y variables de entorno tipadas
 │   │   └── env.config.ts
-│   ├── conexion/              # Conectividad a base de datos y ConnectionPool
-│   │   ├── config.ts          # Configuración del driver mssql
-│   │   └── connection.ts      # Singleton resiliente del ConnectionPool
+│   ├── conexion/              # Conectividad a PostgreSQL / Supabase
+│   │   ├── config.ts          # Configuración del Pool pg (DATABASE_URL / SSL)
+│   │   └── connection.ts      # Singleton resiliente del Pool y helper query()
 │   ├── models/                # Entidades del dominio, DTOs y tipos
 │   │   ├── usuario.ts         # Usuario, DTOs y UsuarioNormalizado
 │   │   ├── finca.ts           # Finca, DTOs y Reportes
@@ -214,14 +215,17 @@ Copia el archivo `.env.example` como `.env` y configura los valores correspondie
 PORT=3000
 NODE_ENV=development
 
-# Base de Datos SQL Server
-DB_USER=sa
-DB_PASSWORD=Passw0rd!
-DB_SERVER=localhost
-DB_DATABASE=Renfi
-DB_PORT=1433
-DB_ENCRYPT=true
-DB_TRUST_SERVER_CERTIFICATE=true
+# Base de Datos (PostgreSQL / Supabase)
+# Opción A (Recomendada para Supabase): Connection string directo o pooler
+DATABASE_URL=postgresql://postgres.[tu-ref-de-proyecto]:[tu-contraseña]@aws-0-[tu-region].pooler.supabase.com:6543/postgres?sslmode=require
+
+# Opción B: Credenciales individuales (desarrollo local o PostgreSQL tradicional)
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_DATABASE=postgres
+DB_SSL=false
 
 # Seguridad JWT
 JWT_SECRET=renfi_jwt_super_secret_key_2025_safe_token
@@ -230,6 +234,32 @@ JWT_EXPIRES_IN=7d
 # CORS
 CORS_ORIGIN=*
 ```
+
+---
+
+## ⚡ Alojamiento y Despliegue en Supabase
+
+El proyecto está 100% preparado y optimizado para ejecutarse sobre **Supabase** (PostgreSQL):
+
+### Paso 1: Cargar el Esquema en Supabase
+1. Ingresa a tu panel en [Supabase Dashboard](https://supabase.com/dashboard) y abre tu proyecto.
+2. Ve a la sección **SQL Editor** en la barra lateral izquierda.
+3. Abre el archivo [`supabase_schema.sql`](file:///c:/Users/aprocurement/Documents/GitHub/API-Renfi/supabase_schema.sql) generado en este repositorio.
+4. Copia y pega todo su contenido en una nueva consulta del SQL Editor y presiona **Run**.
+5. Esto creará automáticamente:
+   - Las **9 tablas** del dominio con tipos PostgreSQL nativos e identidades autoincrementables.
+   - Las **claves foráneas** y reglas de integridad referencial (`CASCADE` / `SET NULL`).
+   - Los **10 índices** de optimización para búsquedas y consultas frecuentes.
+   - Las **36 funciones PL/pgSQL** (compatibles con Supabase RPC `supabase.rpc()` y queries SQL directas).
+   - Los **datos semilla iniciales** (roles de Administrador, Cliente y Propietario, municipios, métodos de pago y usuario admin).
+   - Políticas de seguridad **RLS (Row Level Security)** abiertas para los roles de API.
+
+### Paso 2: Conectar la API a Supabase
+1. En tu proyecto de Supabase, ve a **Project Settings** -> **Database**.
+2. En la sección **Connection parameters** o **Connection string**, selecciona el modo **URI** (puedes usar el Connection Pooler en modo `Transaction` puerto `6543` o conexión directa puerto `5432`).
+3. Reemplaza `[YOUR-PASSWORD]` por la contraseña de la base de datos de tu proyecto.
+4. Pega la URL en la variable `DATABASE_URL` dentro de tu archivo `.env`.
+5. Inicia la API: `npm run dev` o `npm run serve`. La API se conectará de inmediato a Supabase mediante el pool de `pg`.
 
 ---
 
@@ -257,4 +287,5 @@ Genera la carpeta optimizada `dist/`.
 npm run serve
 ```
 Ejecuta el servidor compilado directamente con Node.js desde `dist/index.js`.
+
 

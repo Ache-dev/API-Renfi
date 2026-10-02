@@ -72,4 +72,3 @@ export interface FincaIngresosTop {
     NombreFinca: string;
     IngresosTotales: number;
 }
-}

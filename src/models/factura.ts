@@ -35,4 +35,3 @@ export interface ActualizarFacturaDto {
     FechaFactura?: Date | string | undefined;
     Total?: number | undefined;
 }
-}

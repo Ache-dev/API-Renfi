@@ -19,4 +19,3 @@ export interface ActualizarMunicipioDto {
     IdMunicipio?: number;
     NombreMunicipio?: string;
 }
-}

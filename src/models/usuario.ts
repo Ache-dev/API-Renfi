@@ -74,4 +74,3 @@ export interface LoginResponseDto {
     token?: string | undefined;
     usuario: UsuarioNormalizado;
 }
-}

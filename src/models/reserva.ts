@@ -73,4 +73,3 @@ export interface ActualizarReservaDto {
     MontoReserva?: number | undefined;
     Estado?: string | undefined;
 }
-}

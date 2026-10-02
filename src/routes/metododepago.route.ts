@@ -15,4 +15,3 @@ router.put('/:id', validarId, metodoController.actualizarMetodo);
 router.delete('/:id', validarId, metodoController.eliminarPorId);
 
 export default router;
-export default router;

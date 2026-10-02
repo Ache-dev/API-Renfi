@@ -50,4 +50,3 @@ export interface ActualizarPagoDto {
     FechaPago?: Date | string | undefined;
     EstadoPago?: string | undefined;
 }
-}

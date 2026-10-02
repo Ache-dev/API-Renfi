@@ -92,4 +92,3 @@ export const getPagosPendientes = async (_req: Request, res: Response, next: Nex
         next(error);
     }
 };
-};

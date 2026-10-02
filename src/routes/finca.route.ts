@@ -22,4 +22,3 @@ router.put('/:id', validarId, fincaController.actualizarFinca);
 router.delete('/:id', validarId, fincaController.eliminarPorId);
 
 export default router;
-export default router;

@@ -1,4 +1,4 @@
-import getConnection from "../conexion/connection";
+import { query } from "../conexion/connection";
 import { 
     Finca, 
     FincaReservada, 
@@ -6,7 +6,6 @@ import {
     FincaIngresos, 
     FincaIngresosTop 
 } from "../models/finca";
-import sql from 'mssql';
 
 export type { 
     FincaReservada, 
@@ -19,163 +18,110 @@ export type {
  * Lista todas las fincas con información de municipio y propietario.
  */
 export const listar = async (): Promise<Finca[]> => {
-    try {
-        const pool = await getConnection();
-        const rs = await pool.request().execute('SP_ListarFincas');
-        if (rs && rs.recordset) {
-            return rs.recordset as Finca[];
-        }
-        return [];
-    } catch (error) {
-        throw error;
-    }
+    const rs = await query<Finca>('SELECT * FROM public."SP_ListarFincas"()');
+    return rs.rows;
 };
 
 /**
  * Inserta una nueva finca y retorna el IdFinca generado.
  */
 export const insertar = async (finca: Finca): Promise<number> => {
-    try {
-        const pool = await getConnection();
-        const result = await pool.request()
-            .input('IdMunicipio', sql.Int, finca.IdMunicipio)
-            .input('NumeroDocumentoUsuario', sql.Int, finca.NumeroDocumentoUsuario)
-            .input('NombreFinca', sql.VarChar(300), finca.NombreFinca)
-            .input('Direccion', sql.VarChar(500), finca.Direccion)
-            .input('InformacionAdicional', sql.VarChar(500), finca.InformacionAdicional ?? null)
-            .input('Capacidad', sql.Int, finca.Capacidad ?? 0)
-            .input('Precio', sql.Int, finca.Precio ?? 0)
-            .input('Estado', sql.VarChar(150), finca.Estado ?? 'Disponible')
-            .input('Calificacion', sql.Int, finca.Calificacion ?? 5)
-            .query(`
-                INSERT INTO Finca (IdMunicipio, NumeroDocumentoUsuario, NombreFinca, Direccion, InformacionAdicional, Capacidad, Precio, Estado, Calificacion)
-                VALUES (@IdMunicipio, @NumeroDocumentoUsuario, @NombreFinca, @Direccion, @InformacionAdicional, @Capacidad, @Precio, @Estado, @Calificacion);
-                
-                SELECT SCOPE_IDENTITY() AS IdFinca;
-            `);
+    const rs = await query<{ IdFinca: number }>(
+        'SELECT public."SP_InsertarFinca"($1, $2, $3, $4, $5, $6, $7, $8, $9) AS "IdFinca"',
+        [
+            finca.IdMunicipio,
+            finca.NumeroDocumentoUsuario,
+            finca.NombreFinca,
+            finca.Direccion,
+            finca.InformacionAdicional ?? null,
+            finca.Capacidad ?? 0,
+            finca.Precio ?? 0,
+            finca.Estado ?? 'Disponible',
+            finca.Calificacion ?? 5
+        ]
+    );
 
-        const nuevoId = result?.recordset?.[0]?.IdFinca;
-        if (!nuevoId) {
-            throw new Error('No se pudo obtener el identificador de la finca creada.');
-        }
-        return Number(nuevoId);
-    } catch (error) {
-        throw error;
+    const nuevoId = rs.rows[0]?.IdFinca;
+    if (!nuevoId) {
+        throw new Error('No se pudo obtener el identificador de la finca creada.');
     }
+    return Number(nuevoId);
 };
 
 /**
  * Actualiza los datos de una finca existente.
  */
 export const actualizar = async (finca: Finca): Promise<void> => {
-    try {
-        const pool = await getConnection();
-        await pool.request()
-            .input('IdFinca', sql.Int, finca.IdFinca)
-            .input('NombreFinca', sql.VarChar(300), finca.NombreFinca)
-            .input('Direccion', sql.VarChar(500), finca.Direccion)
-            .input('InformacionAdicional', sql.VarChar(500), finca.InformacionAdicional ?? null)
-            .input('Capacidad', sql.Int, finca.Capacidad ?? 0)
-            .input('Precio', sql.Int, finca.Precio ?? 0)
-            .input('Estado', sql.VarChar(150), finca.Estado ?? 'Disponible')
-            .execute('SP_ActualizarFinca');
-    } catch (error) {
-        throw error;
-    }
+    await query(
+        'SELECT public."SP_ActualizarFinca"($1, $2, $3, $4, $5, $6, $7)',
+        [
+            finca.IdFinca,
+            finca.NombreFinca,
+            finca.Direccion,
+            finca.InformacionAdicional ?? null,
+            finca.Capacidad ?? 0,
+            finca.Precio ?? 0,
+            finca.Estado ?? 'Disponible'
+        ]
+    );
 };
 
 /**
  * Elimina una finca por su identificador.
  */
 export const eliminarPorId = async (id: number): Promise<void> => {
-    try {
-        const pool = await getConnection();
-        await pool.request()
-            .input('IdFinca', sql.Int, id)
-            .query('DELETE FROM Finca WHERE IdFinca = @IdFinca');
-    } catch (error) {
-        throw error;
-    }
+    await query('DELETE FROM public."Finca" WHERE "IdFinca" = $1', [id]);
 };
 
 /**
  * Busca una finca por su identificador incluyendo datos del propietario y municipio.
  */
 export const buscarPorId = async (id: number): Promise<Finca | null> => {
-    try {
-        const pool = await getConnection();
-        const rs = await pool.request()
-            .input('IdFinca', sql.Int, id)
-            .query(`
-                SELECT 
-                    F.IdFinca, 
-                    F.IdMunicipio, 
-                    F.NumeroDocumentoUsuario, 
-                    F.NombreFinca, 
-                    F.Direccion, 
-                    F.InformacionAdicional, 
-                    F.Capacidad, 
-                    F.Precio, 
-                    F.Estado, 
-                    F.Calificacion, 
-                    M.NombreMunicipio, 
-                    U.NumeroDocumento AS IdPropietario,
-                    U.NombreUsuario AS NombrePropietario,
-                    U.ApellidoUsuario AS ApellidoPropietario,
-                    U.Telefono AS TelefonoPropietario,
-                    U.Correo AS CorreoPropietario,
-                    U.NombreUsuario AS Dueno
-                FROM Finca F 
-                LEFT JOIN Municipio M ON F.IdMunicipio = M.IdMunicipio 
-                LEFT JOIN Usuario U ON F.NumeroDocumentoUsuario = U.NumeroDocumento 
-                WHERE F.IdFinca = @IdFinca
-            `);
-        if (rs && rs.recordset && rs.recordset.length > 0) {
-            return rs.recordset[0] as Finca;
-        }
-        return null;
-    } catch (error) {
-        throw error;
-    }
+    const rs = await query<Finca>(
+        `SELECT 
+            F."IdFinca", 
+            F."IdMunicipio", 
+            F."NumeroDocumentoUsuario", 
+            F."NombreFinca", 
+            F."Direccion", 
+            F."InformacionAdicional", 
+            F."Capacidad", 
+            F."Precio", 
+            F."Estado", 
+            F."Calificacion", 
+            M."NombreMunicipio", 
+            U."NumeroDocumento" AS "IdPropietario",
+            U."NombreUsuario" AS "NombrePropietario",
+            U."ApellidoUsuario" AS "ApellidoPropietario",
+            U."Telefono" AS "TelefonoPropietario",
+            U."Correo" AS "CorreoPropietario",
+            U."NombreUsuario" AS "Dueno"
+        FROM public."Finca" F 
+        LEFT JOIN public."Municipio" M ON F."IdMunicipio" = M."IdMunicipio" 
+        LEFT JOIN public."Usuario" U ON F."NumeroDocumentoUsuario" = U."NumeroDocumento" 
+        WHERE F."IdFinca" = $1`,
+        [id]
+    );
+    return rs.rows[0] || null;
 };
 
 // Reportes
 export const fincasMasReservadas = async (): Promise<FincaReservada[]> => {
-    try {
-        const pool = await getConnection();
-        const rs = await pool.request().execute('SP_FincasMasReservadas');
-        return (rs?.recordset as FincaReservada[]) ?? [];
-    } catch (error) {
-        throw error;
-    }
+    const rs = await query<FincaReservada>('SELECT * FROM public."SP_FincasMasReservadas"()');
+    return rs.rows;
 };
 
 export const promedioCalificacionFincas = async (): Promise<FincaPromedioCalificacion[]> => {
-    try {
-        const pool = await getConnection();
-        const rs = await pool.request().execute('SP_PromedioCalificacionFincas');
-        return (rs?.recordset as FincaPromedioCalificacion[]) ?? [];
-    } catch (error) {
-        throw error;
-    }
+    const rs = await query<FincaPromedioCalificacion>('SELECT * FROM public."SP_PromedioCalificacionFincas"()');
+    return rs.rows;
 };
 
 export const totalIngresosPorFinca = async (): Promise<FincaIngresos[]> => {
-    try {
-        const pool = await getConnection();
-        const rs = await pool.request().execute('SP_TotalIngresosPorFinca');
-        return (rs?.recordset as FincaIngresos[]) ?? [];
-    } catch (error) {
-        throw error;
-    }
+    const rs = await query<FincaIngresos>('SELECT * FROM public."SP_TotalIngresosPorFinca"()');
+    return rs.rows;
 };
 
 export const fincasConMasIngresos = async (): Promise<FincaIngresosTop[]> => {
-    try {
-        const pool = await getConnection();
-        const rs = await pool.request().execute('SP_FincasConMasIngresos');
-        return (rs?.recordset as FincaIngresosTop[]) ?? [];
-    } catch (error) {
-        throw error;
-    }
+    const rs = await query<FincaIngresosTop>('SELECT * FROM public."SP_FincasConMasIngresos"()');
+    return rs.rows;
 };

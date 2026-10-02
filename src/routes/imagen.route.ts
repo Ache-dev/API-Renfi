@@ -19,4 +19,3 @@ router.put('/:id', validarId, imagenController.actualizarImagen);
 router.delete('/:id', validarId, imagenController.eliminarPorId);
 
 export default router;
-export default router;

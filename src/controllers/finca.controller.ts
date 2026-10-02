@@ -116,4 +116,3 @@ export const getFincasConMasIngresos = async (_req: Request, res: Response, next
         next(error);
     }
 };
-};

@@ -1,54 +1,43 @@
-import sql, { ConnectionPool } from "mssql";
-import { sqlConfig } from "./config";
+import { Pool, QueryResult, QueryResultRow } from "pg";
+import { pgConfig } from "./config";
 
-let pool: ConnectionPool | null = null;
+let pool: Pool | null = null;
 
 /**
- * Retorna la instancia activa del ConnectionPool de SQL Server (Singleton).
- * Si la conexión no existe o está cerrada, inicializa un nuevo pool con reintentos.
+ * Retorna la instancia activa del Pool de PostgreSQL / Supabase (Singleton).
  */
-export default async function getConnection(): Promise<ConnectionPool> {
-    try {
-        if (pool && pool.connected) {
-            return pool;
-        }
+export default function getPool(): Pool {
+    if (!pool) {
+        pool = new Pool(pgConfig);
 
-        if (pool && pool.connecting) {
-            // Esperar a que termine de conectarse
-            await new Promise((resolve) => setTimeout(resolve, 300));
-            if (pool.connected) {
-                return pool;
-            }
-        }
-
-        // Crear y conectar un nuevo pool
-        pool = new sql.ConnectionPool(sqlConfig);
-        await pool.connect();
-
-        pool.on('error', (err) => {
-            console.error('[Database Pool Error]:', err);
-            pool = null;
+        pool.on("error", (err) => {
+            console.error("[PostgreSQL Pool Error]:", err);
         });
-
-        return pool;
-    } catch (error) {
-        console.error('[Database Connection Failed]:', error);
-        pool = null;
-        throw error;
     }
+    return pool;
+}
+
+/**
+ * Helper para ejecutar consultas parametrizadas con gestión automática de clientes del pool.
+ */
+export async function query<T extends QueryResultRow = any>(
+    text: string,
+    params?: any[]
+): Promise<QueryResult<T>> {
+    const client = getPool();
+    return await client.query<T>(text, params);
 }
 
 /**
  * Cierra ordenadamente la conexión al pool de base de datos.
  */
 export async function closeConnection(): Promise<void> {
-    if (pool && pool.connected) {
+    if (pool) {
         try {
-            await pool.close();
+            await pool.end();
             pool = null;
         } catch (error) {
-            console.error('[Database Close Error]:', error);
+            console.error("[PostgreSQL Pool Close Error]:", error);
         }
     }
-}
 }

@@ -19,4 +19,3 @@ router.put('/:id', validarId, pagoController.actualizarPago);
 router.delete('/:id', validarId, pagoController.eliminarPorId);
 
 export default router;
-export default router;

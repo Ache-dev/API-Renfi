@@ -100,4 +100,3 @@ export const eliminarPorId = async (req: Request, res: Response, next: NextFunct
         next(error);
     }
 };
-};

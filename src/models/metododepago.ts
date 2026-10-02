@@ -17,4 +17,3 @@ export interface ActualizarMetodoDePagoDto {
     NombreMetodoDePago?: string;
     PagoMixto?: boolean;
 }
-}

@@ -19,4 +19,3 @@ router.put('/:id', validarId, municipioController.actualizarMunicipio);
 router.delete('/:id', validarId, municipioController.eliminarPorId);
 
 export default router;
-export default router;
