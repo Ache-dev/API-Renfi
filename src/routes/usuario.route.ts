@@ -6,6 +6,7 @@ const router = Router();
 
 // Autenticación
 router.post('/login', usuarioController.login);
+router.post('/iniciar-sesion', usuarioController.login);
 
 // CRUD de Usuarios
 router.get('/', usuarioController.getUsuarios);
