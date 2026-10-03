@@ -15,6 +15,10 @@ export const envConfig = {
 
     // Base de datos PostgreSQL / Supabase
     DB: {
+        // Postgres embebido (PGlite): activo salvo que haya DATABASE_URL o DB_EMBEDDED=false
+        EMBEDDED: process.env.DB_EMBEDDED ? process.env.DB_EMBEDDED !== 'false' : !process.env.DATABASE_URL,
+        // Instantánea de PGlite (.tgz con escritura atómica) o memory:// para una BD volátil (tests)
+        EMBEDDED_FILE: process.env.DB_EMBEDDED_FILE || (process.env.DB_EMBEDDED_DIR === 'memory://' ? 'memory://' : './.pglite.tgz'),
         CONNECTION_STRING: process.env.DATABASE_URL || '',
         HOST: process.env.DB_HOST || process.env.PGHOST || 'localhost',
         PORT: Number(process.env.DB_PORT || process.env.PGPORT) || 5432,
