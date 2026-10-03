@@ -66,3 +66,11 @@ export const buscarPorId = async (id: number): Promise<Imagen | null> => {
     );
     return rs.rows[0] || null;
 };
+
+/**
+ * Indica si existe la finca.
+ */
+export const existeFinca = async (idFinca: number): Promise<boolean> => {
+    const rs = await query('SELECT 1 FROM public."Finca" WHERE "IdFinca" = $1', [idFinca]);
+    return rs.rows.length > 0;
+};

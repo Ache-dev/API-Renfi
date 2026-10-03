@@ -62,3 +62,11 @@ export const buscarPorId = async (id: number): Promise<Municipio | null> => {
     );
     return rs.rows[0] || null;
 };
+
+/**
+ * Cuenta registros de Finca que referencian al id (el esquema usa ON DELETE SET NULL).
+ */
+export const contarReferencias = async (id: number): Promise<number> => {
+    const rs = await query<{ n: string }>('SELECT COUNT(*) AS n FROM public."Finca" WHERE "IdMunicipio" = $1', [id]);
+    return Number(rs.rows[0]?.n ?? 0);
+};

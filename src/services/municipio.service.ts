@@ -24,7 +24,7 @@ export const crearMunicipio = async (dto: CrearMunicipioDto): Promise<{
     IdMunicipio: number;
     municipio: Municipio | null;
 }> => {
-    if (!dto.NombreMunicipio) {
+    if (typeof dto?.NombreMunicipio !== 'string' || !dto.NombreMunicipio.trim()) {
         throw new AppError('El campo NombreMunicipio es obligatorio', 400);
     }
 
@@ -53,7 +53,7 @@ export const actualizarMunicipio = async (id: number, dto: ActualizarMunicipioDt
 
     const actualizado: Municipio = {
         IdMunicipio: id,
-        NombreMunicipio: dto.NombreMunicipio !== undefined ? dto.NombreMunicipio.trim() : existente.NombreMunicipio
+        NombreMunicipio: typeof dto?.NombreMunicipio === 'string' && dto.NombreMunicipio.trim() ? dto.NombreMunicipio.trim() : existente.NombreMunicipio
     };
 
     await municipioDao.actualizar(actualizado);
@@ -67,6 +67,9 @@ export const eliminarPorId = async (id: number): Promise<void> => {
     const existente = await municipioDao.buscarPorId(id);
     if (!existente) {
         throw new AppError(`Municipio con ID ${id} no encontrado`, 404);
+    }
+    if (await municipioDao.contarReferencias(id) > 0) {
+        throw new AppError('No se puede eliminar el municipio: tiene fincas asociadas', 409);
     }
     await municipioDao.eliminarPorId(id);
 };

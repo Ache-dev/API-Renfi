@@ -24,7 +24,7 @@ export const crearRol = async (dto: CrearRolDto): Promise<{
     IdRol: number;
     rol: Rol | null;
 }> => {
-    if (!dto.NombreRol) {
+    if (typeof dto?.NombreRol !== 'string' || !dto.NombreRol.trim()) {
         throw new AppError('El campo NombreRol es obligatorio', 400);
     }
 
@@ -53,7 +53,7 @@ export const actualizarRol = async (id: number, dto: ActualizarRolDto): Promise<
 
     const actualizado: Rol = {
         IdRol: id,
-        NombreRol: dto.NombreRol !== undefined ? dto.NombreRol.trim() : existente.NombreRol
+        NombreRol: typeof dto?.NombreRol === 'string' && dto.NombreRol.trim() ? dto.NombreRol.trim() : existente.NombreRol
     };
 
     await rolDao.actualizar(actualizado);
@@ -67,6 +67,9 @@ export const eliminarPorId = async (id: number): Promise<void> => {
     const existente = await rolDao.buscarPorId(id);
     if (!existente) {
         throw new AppError(`Rol con ID ${id} no encontrado`, 404);
+    }
+    if (await rolDao.contarReferencias(id) > 0) {
+        throw new AppError('No se puede eliminar el rol: tiene usuarios asociados', 409);
     }
     await rolDao.eliminarPorId(id);
 };

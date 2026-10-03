@@ -8,7 +8,9 @@ export interface Municipio {
 
 export interface MunicipioReporte {
     NombreMunicipio: string;
-    CantidadReservas: number;
+    IdFinca: number;
+    NombreFinca: string;
+    TotalReservas: number;
 }
 
 export interface CrearMunicipioDto {
