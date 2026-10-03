@@ -9,7 +9,7 @@ import {
     LoginResponseDto 
 } from '../models/usuario';
 import envConfig from '../config/env.config';
-import { AppError } from '../middlewares/error.middleware';
+import { AppError, esErrorDeConexion } from '../middlewares/error.middleware';
 
 /**
  * Calcula el hash SHA-512 en minúsculas para compatibilidad con el frontend Angular.
@@ -149,9 +149,7 @@ export const login = async (correoRaw: string, contrasenaRaw: string): Promise<L
             }
         }
     } catch (err: any) {
-        if (err instanceof AppError) {
-            throw err;
-        }
+        if (!esErrorDeConexion(err)) throw err;
         // Base de datos PostgreSQL no disponible o en reposo
         console.warn(`[UsuarioService] Conexión a BD no disponible (${err.message || err}). Usando almacén de contingencia.`);
     }
@@ -191,11 +189,9 @@ export const login = async (correoRaw: string, contrasenaRaw: string): Promise<L
  */
 export const getUsuarios = async (): Promise<UsuarioNormalizado[]> => {
     try {
-        const usuarios = await usuarioDao.listar();
-        if (usuarios && usuarios.length > 0) {
-            return usuarios.map(normalizarUsuario);
-        }
+        return (await usuarioDao.listar()).map(normalizarUsuario);
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn('[UsuarioService] Error al listar usuarios desde BD. Usando respaldo demo.');
     }
     return fallbackUsuarios.map(normalizarUsuario);
@@ -207,10 +203,9 @@ export const getUsuarios = async (): Promise<UsuarioNormalizado[]> => {
 export const buscarPorId = async (id: number): Promise<UsuarioNormalizado | null> => {
     try {
         const usuario = await usuarioDao.buscarPorId(id);
-        if (usuario) {
-            return normalizarUsuario(usuario);
-        }
+        return usuario ? normalizarUsuario(usuario) : null;
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[UsuarioService] Error al buscar usuario ${id} en BD.`);
     }
     const fallback = fallbackUsuarios.find(u => u.NumeroDocumento === id);
@@ -255,7 +250,7 @@ export const crearUsuario = async (dto: RegistroUsuarioDto): Promise<{ id: numbe
         usuarioNormalizado = creado ? normalizarUsuario(creado) : normalizarUsuario({ ...usuarioParaInsertar, NumeroDocumento: id });
         fallbackUsuarios.push({ ...usuarioParaInsertar, NumeroDocumento: id });
     } catch (err: any) {
-        if (err instanceof AppError) throw err;
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[UsuarioService] Conexión a BD no disponible al registrar. Guardando en memoria de contingencia.`);
         const nuevoFallback: Usuario = {
             ...usuarioParaInsertar,
@@ -280,6 +275,7 @@ export const actualizarUsuario = async (id: number, dto: ActualizarUsuarioDto): 
     try {
         existente = await usuarioDao.buscarPorId(id);
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[UsuarioService] Conexión a BD no disponible al buscar para actualizar.`);
     }
 
@@ -307,6 +303,7 @@ export const actualizarUsuario = async (id: number, dto: ActualizarUsuarioDto): 
         const actualizado = await usuarioDao.buscarPorId(id);
         if (actualizado) return normalizarUsuario(actualizado);
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[UsuarioService] Conexión a BD no disponible al actualizar.`);
     }
 
@@ -325,6 +322,7 @@ export const eliminarPorId = async (id: number): Promise<void> => {
     try {
         await usuarioDao.eliminarPorId(id);
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[UsuarioService] Conexión a BD no disponible al eliminar.`);
     }
     const idx = fallbackUsuarios.findIndex(u => u.NumeroDocumento === id);

@@ -8,7 +8,7 @@ import {
     FincaIngresos, 
     FincaIngresosTop 
 } from '../models/finca';
-import { AppError } from '../middlewares/error.middleware';
+import { AppError, esErrorDeConexion } from '../middlewares/error.middleware';
 
 // Fincas seed demo representativas de la arquitectura campestre colombiana
 const SEED_FINCAS: Finca[] = [
@@ -105,11 +105,9 @@ const fallbackFincas: Finca[] = [...SEED_FINCAS];
  */
 export const getFincas = async (): Promise<Finca[]> => {
     try {
-        const fincas = await fincaDao.listar();
-        if (fincas && fincas.length > 0) {
-            return fincas;
-        }
+        return await fincaDao.listar();
     } catch (err: any) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[FincaService] Conexión a BD no disponible al listar (${err.message || err}). Usando catálogo demo.`);
     }
     return fallbackFincas;
@@ -120,9 +118,9 @@ export const getFincas = async (): Promise<Finca[]> => {
  */
 export const buscarPorId = async (id: number): Promise<Finca | null> => {
     try {
-        const finca = await fincaDao.buscarPorId(id);
-        if (finca) return finca;
+        return await fincaDao.buscarPorId(id);
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[FincaService] Conexión a BD no disponible al buscar finca ${id}.`);
     }
     return fallbackFincas.find(f => f.IdFinca === id) || null;
@@ -156,6 +154,7 @@ export const crearFinca = async (dto: CrearFincaDto): Promise<{ id: number; finc
         fincaCreada = await fincaDao.buscarPorId(id);
         if (fincaCreada) fallbackFincas.push(fincaCreada);
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[FincaService] Conexión a BD no disponible al insertar finca. Guardando en memoria.`);
         fincaCreada = { ...finca, IdFinca: id };
         fallbackFincas.push(fincaCreada);
@@ -194,6 +193,7 @@ export const actualizarFinca = async (id: number, dto: ActualizarFincaDto): Prom
         const actualizado = await fincaDao.buscarPorId(id);
         if (actualizado) return actualizado;
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[FincaService] Conexión a BD no disponible al actualizar finca ${id}.`);
     }
 
@@ -217,6 +217,7 @@ export const eliminarPorId = async (id: number): Promise<void> => {
     try {
         await fincaDao.eliminarPorId(id);
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         console.warn(`[FincaService] Conexión a BD no disponible al eliminar finca.`);
     }
     const idx = fallbackFincas.findIndex(f => f.IdFinca === id);
@@ -230,6 +231,7 @@ export const getFincasMasReservadas = async (): Promise<FincaReservada[]> => {
     try {
         return await fincaDao.fincasMasReservadas();
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         return fallbackFincas.map(f => ({ NombreFinca: f.NombreFinca || '', CantidadReservas: Math.floor(Math.random() * 20) + 5 }));
     }
 };
@@ -238,6 +240,7 @@ export const getPromedioCalificacionFincas = async (): Promise<FincaPromedioCali
     try {
         return await fincaDao.promedioCalificacionFincas();
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         return fallbackFincas.map(f => ({ NombreFinca: f.NombreFinca || '', PromedioCalificacion: f.Calificacion || 5 }));
     }
 };
@@ -246,6 +249,7 @@ export const getTotalIngresosPorFinca = async (): Promise<FincaIngresos[]> => {
     try {
         return await fincaDao.totalIngresosPorFinca();
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         return fallbackFincas.map(f => ({ NombreFinca: f.NombreFinca || '', TotalIngresos: (f.Precio || 500000) * 8 }));
     }
 };
@@ -254,6 +258,7 @@ export const getFincasConMasIngresos = async (): Promise<FincaIngresosTop[]> => 
     try {
         return await fincaDao.fincasConMasIngresos();
     } catch (err) {
+        if (!esErrorDeConexion(err)) throw err;
         return fallbackFincas.slice(0, 3).map(f => ({ NombreFinca: f.NombreFinca || '', IngresosTotales: (f.Precio || 500000) * 12 }));
     }
 };
