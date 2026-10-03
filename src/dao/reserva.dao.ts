@@ -183,3 +183,24 @@ export const listarPorUsuario = async (numeroDocumento: number): Promise<Reserva
     );
     return rs.rows;
 };
+
+/**
+ * Cuenta reservas no canceladas de la finca que se solapan con [entrada, salida).
+ */
+export const contarSolapes = async (idFinca: number, entrada: Date, salida: Date, excluirId = 0): Promise<number> => {
+    const rs = await query<{ n: number }>(
+        `SELECT COUNT(*)::int AS n FROM public."Reserva"
+         WHERE "IdFinca" = $1 AND "IdReserva" <> $4 AND LOWER(COALESCE("Estado",'')) NOT IN ('cancelada','cancelado','anulada','anulado')
+           AND "FechaEntrada" < $3::timestamp AND "FechaSalida" > $2::timestamp`,
+        [idFinca, entrada, salida, excluirId]
+    );
+    return rs.rows[0]?.n ?? 0;
+};
+
+/**
+ * Capacidad de una finca (null si no existe).
+ */
+export const capacidadFinca = async (idFinca: number): Promise<number | null> => {
+    const rs = await query<{ Capacidad: number }>('SELECT "Capacidad" FROM public."Finca" WHERE "IdFinca" = $1', [idFinca]);
+    return rs.rows[0] ? Number(rs.rows[0].Capacidad) : null;
+};

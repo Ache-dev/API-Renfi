@@ -39,11 +39,14 @@ export const crearReserva = async (dto: CrearReservaDto): Promise<{
     id: number;
     IdReserva: number;
     idReserva: number;
-    IdFactura?: number | undefined;
+    IdFactura: number;
     reserva: Reserva | null;
 }> => {
-    if (!dto.IdFinca || !dto.FechaEntrada || !dto.FechaSalida || !dto.MontoReserva) {
-        throw new AppError('Los campos IdFinca, FechaEntrada, FechaSalida y MontoReserva son obligatorios', 400);
+    if (!dto.IdFinca || !dto.NumeroDocumentoUsuario || !dto.FechaEntrada || !dto.FechaSalida || !dto.MontoReserva) {
+        throw new AppError('Los campos IdFinca, NumeroDocumentoUsuario, FechaEntrada, FechaSalida y MontoReserva son obligatorios', 400);
+    }
+    if (!Number.isInteger(Number(dto.IdFinca)) || !Number.isInteger(Number(dto.NumeroDocumentoUsuario)) || !(Number(dto.MontoReserva) > 0)) {
+        throw new AppError('IdFinca, NumeroDocumentoUsuario y MontoReserva deben ser numéricos válidos', 400);
     }
 
     const fechaEntrada = normalizeDate(dto.FechaEntrada);
@@ -55,6 +58,22 @@ export const crearReserva = async (dto: CrearReservaDto): Promise<{
 
     if (fechaSalida <= fechaEntrada) {
         throw new AppError('La fecha de salida debe ser posterior a la fecha de entrada', 400);
+    }
+
+    const huespedes = dto.Huespedes ?? dto.huespedes;
+    if (huespedes !== undefined && huespedes !== null) {
+        const capacidad = await reservaDao.capacidadFinca(Number(dto.IdFinca));
+        if (!Number.isInteger(Number(huespedes)) || Number(huespedes) < 1) {
+            throw new AppError('El número de huéspedes debe ser al menos 1', 400);
+        }
+        if (capacidad !== null && Number(huespedes) > capacidad) {
+            throw new AppError(`El número de huéspedes (${huespedes}) supera la capacidad de la finca (${capacidad})`, 400);
+        }
+    }
+
+    // ponytail: check-then-insert sin lock; con alta concurrencia usar EXCLUDE constraint (btree_gist) en BD
+    if (await reservaDao.contarSolapes(Number(dto.IdFinca), fechaEntrada, fechaSalida) > 0) {
+        throw new AppError('La finca ya tiene una reserva en las fechas seleccionadas', 409);
     }
 
     const reservaParaInsertar: Reserva = {
@@ -69,8 +88,8 @@ export const crearReserva = async (dto: CrearReservaDto): Promise<{
 
     const idReserva = await reservaDao.insertar(reservaParaInsertar);
 
-    // Intentar crear factura inicial asociada si no existe
-    let idFactura: number | undefined;
+    // La factura se crea siempre junto con la reserva; si falla se revierte la reserva.
+    let idFactura: number;
     try {
         const factura: Factura = {
             IdFactura: 0,
@@ -80,7 +99,8 @@ export const crearReserva = async (dto: CrearReservaDto): Promise<{
         };
         idFactura = await facturaDao.insertar(factura);
     } catch (e) {
-        // La factura se puede crear en paso posterior por el frontend
+        await reservaDao.eliminarPorId(idReserva);
+        throw e;
     }
 
     const reservaCompleta = await reservaDao.buscarPorId(idReserva);

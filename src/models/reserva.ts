@@ -58,6 +58,8 @@ export interface CrearReservaDto {
     FechaSalida: Date | string;
     MontoReserva: number;
     Estado?: string | undefined;
+    Huespedes?: number | undefined;
+    huespedes?: number | undefined;
 }
 
 /**
