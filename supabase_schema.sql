@@ -1182,8 +1182,10 @@ SELECT setval(pg_get_serial_sequence('public."Usuario"', 'NumeroDocumento'), COA
 
 -- =============================================================================
 -- 7. CONFIGURACIÓN DE SEGURIDAD (SUPABASE RLS - ROW LEVEL SECURITY)
--- Habilita RLS pero permite el acceso completo a los roles de API y autenticados
--- para evitar respuestas vacías ('permission denied' o rows ocultas).
+-- Solo API-Renfi accede a la base de datos, con la clave secret (rol service_role,
+-- que ignora RLS). RLS queda activo SIN políticas y los roles públicos (anon,
+-- authenticated) no reciben permisos: la clave publishable no puede leer ni escribir nada.
+-- Para una base ya creada, ejecuta db/seguridad.sql.
 -- =============================================================================
 
 ALTER TABLE public."Rol" ENABLE ROW LEVEL SECURITY;
@@ -1196,22 +1198,17 @@ ALTER TABLE public."Reserva" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Factura" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."Pago" ENABLE ROW LEVEL SECURITY;
 
--- Políticas permisivas (Open access para API backend y clientes Supabase autorizados)
-CREATE POLICY "Permitir_Todo_Rol" ON public."Rol" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir_Todo_Usuario" ON public."Usuario" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir_Todo_Municipio" ON public."Municipio" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir_Todo_Finca" ON public."Finca" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir_Todo_Imagen" ON public."Imagen" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir_Todo_MetodoDePago" ON public."MetodoDePago" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir_Todo_Reserva" ON public."Reserva" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir_Todo_Factura" ON public."Factura" FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Permitir_Todo_Pago" ON public."Pago" FOR ALL USING (true) WITH CHECK (true);
+REVOKE ALL ON ALL TABLES    IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES    FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
 
--- Permisos de ejecución de funciones para los roles de Supabase (anon, authenticated, service_role)
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
 
 -- =============================================================================
 -- FIN DEL SCRIPT SUPABASE POSTGRESQL RENFI
