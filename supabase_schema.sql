@@ -2,6 +2,8 @@
 -- ⚠️  SCRIPT DESTRUCTIVO: SOLO PARA CREAR UNA BASE NUEVA O VACÍA.
 -- Borra y recrea TODAS las tablas (y por tanto todos sus datos). Para una base
 -- que ya tiene datos NO lo ejecutes: usa los scripts de db/migraciones/.
+-- Este archivo es la línea base: tras ejecutarlo en una base nueva, aplica
+-- db/migraciones/ en orden (001, 002...) para llegar al esquema actual.
 -- =============================================================================
 -- =============================================================================
 -- BASE DE DATOS RENFI - POSTGRESQL / SUPABASE
