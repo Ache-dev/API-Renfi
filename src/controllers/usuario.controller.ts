@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as usuarioService from '../services/usuario.service';
 import { AppError } from '../middlewares/error.middleware';
+import { esAdmin } from '../middlewares/auth.middleware';
 
 /**
  * Controlador de autenticación: login de usuario.
@@ -56,7 +57,7 @@ export const buscarPorId = async (req: Request, res: Response, next: NextFunctio
  */
 export const crearUsuario = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const resultado = await usuarioService.crearUsuario(req.body);
+        const resultado = await usuarioService.crearUsuario(req.body, { esAdmin: esAdmin(req.user) });
         res.status(201).json({
             message: 'Usuario creado correctamente',
             id: resultado.id,
@@ -75,7 +76,7 @@ export const crearUsuario = async (req: Request, res: Response, next: NextFuncti
 export const actualizarUsuario = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const id = Number(req.params.id);
-        const actualizado = await usuarioService.actualizarUsuario(id, req.body);
+        const actualizado = await usuarioService.actualizarUsuario(id, req.body, { esAdmin: esAdmin(req.user) });
         res.status(200).json({
             message: 'Usuario actualizado correctamente',
             usuario: actualizado,

@@ -1,94 +1,66 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import * as usuarioDao from '../dao/usuario.dao';
-import { 
-    Usuario, 
-    UsuarioNormalizado, 
-    RegistroUsuarioDto, 
-    ActualizarUsuarioDto, 
-    LoginResponseDto 
+import {
+    Usuario,
+    UsuarioNormalizado,
+    RegistroUsuarioDto,
+    ActualizarUsuarioDto,
+    LoginResponseDto
 } from '../models/usuario';
 import envConfig from '../config/env.config';
-import { AppError, esErrorDeConexion } from '../middlewares/error.middleware';
+import { AppError } from '../middlewares/error.middleware';
+import { huellaContrasena } from '../middlewares/auth.middleware';
+
+const BCRYPT_ROUNDS = 10;
+const ES_SHA512 = /^[0-9a-f]{128}$/i;
 
 /**
- * Calcula el hash SHA-512 en minúsculas para compatibilidad con el frontend Angular.
+ * Calcula el hash SHA-512 en minúsculas (formato que envían los clientes Angular y Expo).
  */
 export const computeSha512 = (value: string): string => {
     return crypto.createHash('sha512').update(value).digest('hex').toLowerCase();
 };
 
 /**
- * Semilla de usuarios demo precargados para asegurar que la autenticación funcione
- * tanto si PostgreSQL / Supabase está conectado como si se opera de forma local o en desarrollo.
+ * Los clientes pueden enviar la contraseña en claro o ya como SHA-512; se normaliza a SHA-512.
  */
-const SEED_USUARIOS: Usuario[] = [
-    {
-        NumeroDocumento: 10001,
-        IdRol: 1,
-        NombreRol: 'Administrador',
-        NombreUsuario: 'Admin',
-        ApellidoUsuario: 'Renfi',
-        Telefono: '3001234567',
-        Correo: 'admin@renfi.com',
-        Contrasena: 'admin123',
-        Estado: 'Activo'
-    },
-    {
-        NumeroDocumento: 10002,
-        IdRol: 2,
-        NombreRol: 'Cliente',
-        NombreUsuario: 'Juan',
-        ApellidoUsuario: 'Pérez',
-        Telefono: '3109876543',
-        Correo: 'juan.perez@example.com',
-        Contrasena: 'cliente123',
-        Estado: 'Activo'
-    },
-    {
-        NumeroDocumento: 10003,
-        IdRol: 2,
-        NombreRol: 'Cliente',
-        NombreUsuario: 'Cliente',
-        ApellidoUsuario: 'Demo',
-        Telefono: '3114567890',
-        Correo: 'cliente@renfi.com',
-        Contrasena: 'cliente123',
-        Estado: 'Activo'
-    }
-];
+const normalizar = (valor: string): string => {
+    const v = (valor || '').trim();
+    return ES_SHA512.test(v) ? v.toLowerCase() : computeSha512(v);
+};
 
-// Repositorio en memoria que persiste altas y cambios de sesión en caso de que la BD esté inaccesible
-const fallbackUsuarios: Usuario[] = [...SEED_USUARIOS];
+// bcrypt solo lee los primeros 72 bytes: se le pasa un SHA-256 (64 caracteres) del SHA-512 normalizado.
+const paraBcrypt = (valor: string): string => crypto.createHash('sha256').update(normalizar(valor)).digest('hex');
 
 /**
- * Validador de contraseña polimórfico:
- * Permite verificar si la contraseña coincide ya sea que el usuario haya enviado
- * texto plano o un hash SHA-512 desde el cliente Angular (CryptoService.hashSHA512).
+ * Hash para guardar en la base de datos: bcrypt(sha256(sha512(contraseña))).
  */
-export const matchPassword = (input: string, stored: string): boolean => {
+export const hashContrasena = (valor: string): Promise<string> => bcrypt.hash(paraBcrypt(valor), BCRYPT_ROUNDS);
+
+/**
+ * Verifica una contraseña contra lo almacenado.
+ * - Almacenado con bcrypt: comparación segura.
+ * - Almacenado heredado (texto plano o SHA-512 sin sal): se acepta y se pide migrarlo a bcrypt.
+ */
+export const verificarContrasena = async (input: string, almacenado: string): Promise<{ ok: boolean; migrar: boolean }> => {
     const rawInput = (input || '').trim();
-    const rawStored = (stored || '').trim();
+    const rawStored = (almacenado || '').trim();
+    if (!rawInput || !rawStored) return { ok: false, migrar: false };
 
-    if (!rawInput || !rawStored) return false;
+    if (rawStored.startsWith('$2')) {
+        return { ok: await bcrypt.compare(paraBcrypt(rawInput), rawStored), migrar: false };
+    }
 
-    // 1. Coincidencia exacta (ej. ambos plano o ambos sha512)
-    if (rawInput.toLowerCase() === rawStored.toLowerCase()) return true;
-
-    // 2. Input recibido es SHA-512 (128 hex chars) y Stored en BD es texto plano
-    const hashedStored = computeSha512(rawStored);
-    if (rawInput.toLowerCase() === hashedStored) return true;
-
-    // 3. Input recibido es texto plano y Stored en BD es SHA-512
-    const hashedInput = computeSha512(rawInput);
-    if (hashedInput === rawStored.toLowerCase()) return true;
-
-    return false;
+    const legado = rawStored.toLowerCase();
+    // Cubre: ambos iguales, almacenado SHA-512 con entrada en claro, y almacenado en claro con entrada SHA-512
+    const ok = rawInput.toLowerCase() === legado || normalizar(rawInput) === legado || computeSha512(rawStored) === rawInput.toLowerCase();
+    return { ok, migrar: ok };
 };
 
 /**
- * Normaliza un usuario de la base de datos para garantizar compatibilidad total
- * con las interfaces de Angular (Renfi) y cualquier cliente HTTP.
+ * Normaliza un usuario de la base de datos para los clientes (nunca incluye la contraseña).
  */
 export const normalizarUsuario = (usuario: Usuario): UsuarioNormalizado => {
     const rolNombre = usuario.NombreRol || (usuario.IdRol === 1 ? 'Administrador' : 'Cliente');
@@ -109,7 +81,7 @@ export const normalizarUsuario = (usuario: Usuario): UsuarioNormalizado => {
 /**
  * Genera un token JWT para la sesión del usuario.
  */
-export const generarToken = (usuario: UsuarioNormalizado): string => {
+export const generarToken = (usuario: UsuarioNormalizado, contrasenaAlmacenada: string): string => {
     return jwt.sign(
         {
             NumeroDocumento: usuario.NumeroDocumento,
@@ -117,16 +89,18 @@ export const generarToken = (usuario: UsuarioNormalizado): string => {
             Correo: usuario.Correo,
             IdRol: usuario.IdRol,
             NombreRol: usuario.NombreRol,
-            NombreUsuario: usuario.NombreUsuario
+            NombreUsuario: usuario.NombreUsuario,
+            pv: huellaContrasena(contrasenaAlmacenada)
         },
         envConfig.JWT.SECRET,
         { expiresIn: envConfig.JWT.EXPIRES_IN } as jwt.SignOptions
     );
 };
 
+const CREDENCIALES_INVALIDAS = 'Credenciales inválidas. Verifica tu correo y contraseña.';
+
 /**
  * Autentica un usuario mediante correo y contraseña.
- * Incluye tolerancia a fallos de conexión a BD y verificación polimórfica de hashes SHA-512.
  */
 export const login = async (correoRaw: string, contrasenaRaw: string): Promise<LoginResponseDto> => {
     const correo = (correoRaw || '').trim().toLowerCase();
@@ -136,197 +110,118 @@ export const login = async (correoRaw: string, contrasenaRaw: string): Promise<L
         throw new AppError('Correo y contraseña son requeridos para iniciar sesión', 400);
     }
 
-    let usuario: Usuario | null = null;
+    const usuario = await usuarioDao.buscarPorCorreo(correo);
+    if (!usuario) throw new AppError(CREDENCIALES_INVALIDAS, 401);
 
-    try {
-        // Intentar buscar en PostgreSQL / Supabase
-        const usuarioDb = await usuarioDao.buscarPorCorreo(correo);
-        if (usuarioDb) {
-            if (matchPassword(contrasena, usuarioDb.Contrasena || '')) {
-                usuario = usuarioDb;
-            } else {
-                throw new AppError('Credenciales inválidas. Verifica tu correo y contraseña.', 401);
-            }
-        }
-    } catch (err: any) {
-        if (!esErrorDeConexion(err)) throw err;
-        // Base de datos PostgreSQL no disponible o en reposo
-        console.warn(`[UsuarioService] Conexión a BD no disponible (${err.message || err}). Usando almacén de contingencia.`);
-    }
-
-    // Si no se encontró en BD o la BD está inaccesible, consultar el almacén demo / fallback
-    if (!usuario) {
-        const fallback = fallbackUsuarios.find(u => u.Correo.toLowerCase() === correo);
-        if (fallback) {
-            if (matchPassword(contrasena, fallback.Contrasena || '')) {
-                usuario = fallback;
-            } else {
-                throw new AppError('Credenciales inválidas. Verifica tu correo y contraseña.', 401);
-            }
-        }
-    }
-
-    if (!usuario) {
-        throw new AppError('Credenciales inválidas. Verifica tu correo y contraseña.', 401);
-    }
+    const { ok, migrar } = await verificarContrasena(contrasena, usuario.Contrasena || '');
+    if (!ok) throw new AppError(CREDENCIALES_INVALIDAS, 401);
 
     if (usuario.Estado && usuario.Estado.toLowerCase() !== 'activo') {
         throw new AppError('El usuario se encuentra inactivo o suspendido. Contacta al administrador.', 401);
     }
 
-    const usuarioNormalizado = normalizarUsuario(usuario);
-    const token = generarToken(usuarioNormalizado);
+    // Migración transparente de contraseñas heredadas (texto plano / SHA-512) a bcrypt
+    let almacenada = usuario.Contrasena || '';
+    if (migrar) {
+        almacenada = await hashContrasena(contrasena);
+        await usuarioDao.actualizar({ ...usuario, Contrasena: almacenada });
+    }
 
+    const usuarioNormalizado = normalizarUsuario(usuario);
     return {
         message: 'Inicio de sesión exitoso',
-        token,
+        token: generarToken(usuarioNormalizado, almacenada),
         usuario: usuarioNormalizado
     };
 };
 
 /**
- * Obtiene todos los usuarios normalizados con respaldo en memoria.
+ * Obtiene todos los usuarios normalizados.
  */
 export const getUsuarios = async (): Promise<UsuarioNormalizado[]> => {
-    try {
-        return (await usuarioDao.listar()).map(normalizarUsuario);
-    } catch (err) {
-        if (!esErrorDeConexion(err)) throw err;
-        console.warn('[UsuarioService] Error al listar usuarios desde BD. Usando respaldo demo.');
-    }
-    return fallbackUsuarios.map(normalizarUsuario);
+    return (await usuarioDao.listar()).map(normalizarUsuario);
 };
 
 /**
  * Busca un usuario por su identificador.
  */
 export const buscarPorId = async (id: number): Promise<UsuarioNormalizado | null> => {
-    try {
-        const usuario = await usuarioDao.buscarPorId(id);
-        return usuario ? normalizarUsuario(usuario) : null;
-    } catch (err) {
-        if (!esErrorDeConexion(err)) throw err;
-        console.warn(`[UsuarioService] Error al buscar usuario ${id} en BD.`);
-    }
-    const fallback = fallbackUsuarios.find(u => u.NumeroDocumento === id);
-    return fallback ? normalizarUsuario(fallback) : null;
+    const usuario = await usuarioDao.buscarPorId(id);
+    return usuario ? normalizarUsuario(usuario) : null;
 };
 
 /**
- * Registra un nuevo usuario con validaciones de negocio y tolerancia a fallos.
+ * Registra un nuevo usuario. Solo un administrador puede elegir rol y estado;
+ * el registro público siempre crea un Cliente activo.
  */
-export const crearUsuario = async (dto: RegistroUsuarioDto): Promise<{ id: number; usuario: UsuarioNormalizado }> => {
+export const crearUsuario = async (
+    dto: RegistroUsuarioDto,
+    quienCrea?: { esAdmin: boolean }
+): Promise<{ id: number; usuario: UsuarioNormalizado }> => {
     if (!dto.NombreUsuario || !dto.ApellidoUsuario || !dto.Correo || !dto.Contrasena) {
         throw new AppError('Los campos NombreUsuario, ApellidoUsuario, Correo y Contrasena son obligatorios', 400);
     }
 
     const correo = dto.Correo.trim().toLowerCase();
-
-    // Validar si el correo ya existe en memoria
-    if (fallbackUsuarios.some(u => u.Correo.toLowerCase() === correo)) {
-        throw new AppError(`El correo '${correo}' ya se encuentra registrado.`, 400);
+    if (await usuarioDao.buscarPorCorreo(correo)) {
+        throw new AppError(`El correo '${correo}' ya se encuentra registrado.`, 409);
     }
 
-    const usuarioParaInsertar: Usuario = {
-        IdRol: dto.IdRol ?? 2,
+    const admin = Boolean(quienCrea?.esAdmin);
+    const id = await usuarioDao.insertar({
+        IdRol: admin ? (dto.IdRol ?? 2) : 2,
         NombreUsuario: dto.NombreUsuario.trim(),
         ApellidoUsuario: dto.ApellidoUsuario.trim(),
         Telefono: dto.Telefono?.trim() || '',
-        Contrasena: dto.Contrasena,
+        Contrasena: await hashContrasena(dto.Contrasena),
         Correo: correo,
-        Estado: dto.Estado || 'Activo'
-    };
+        Estado: admin ? (dto.Estado || 'Activo') : 'Activo'
+    });
 
-    let id = Date.now() % 1000000;
-    let usuarioNormalizado: UsuarioNormalizado;
-
-    try {
-        const existente = await usuarioDao.buscarPorCorreo(correo);
-        if (existente) {
-            throw new AppError(`El correo '${correo}' ya se encuentra registrado.`, 400);
-        }
-        id = await usuarioDao.insertar(usuarioParaInsertar);
-        const creado = await usuarioDao.buscarPorId(id);
-        usuarioNormalizado = creado ? normalizarUsuario(creado) : normalizarUsuario({ ...usuarioParaInsertar, NumeroDocumento: id });
-        fallbackUsuarios.push({ ...usuarioParaInsertar, NumeroDocumento: id });
-    } catch (err: any) {
-        if (!esErrorDeConexion(err)) throw err;
-        console.warn(`[UsuarioService] Conexión a BD no disponible al registrar. Guardando en memoria de contingencia.`);
-        const nuevoFallback: Usuario = {
-            ...usuarioParaInsertar,
-            NumeroDocumento: id,
-            NombreRol: usuarioParaInsertar.IdRol === 1 ? 'Administrador' : 'Cliente'
-        };
-        fallbackUsuarios.push(nuevoFallback);
-        usuarioNormalizado = normalizarUsuario(nuevoFallback);
-    }
-
-    return {
-        id,
-        usuario: usuarioNormalizado
-    };
+    const creado = await usuarioDao.buscarPorId(id);
+    if (!creado) throw new AppError('No se pudo leer el usuario recién creado.', 500);
+    return { id, usuario: normalizarUsuario(creado) };
 };
 
 /**
- * Actualiza un usuario existente permitiendo actualizaciones parciales (PATCH/PUT).
+ * Actualiza un usuario permitiendo cambios parciales. Un usuario normal solo puede
+ * cambiar nombre, apellido, teléfono y contraseña; rol, estado y correo son del administrador.
  */
-export const actualizarUsuario = async (id: number, dto: ActualizarUsuarioDto): Promise<UsuarioNormalizado> => {
-    let existente: Usuario | null = null;
-    try {
-        existente = await usuarioDao.buscarPorId(id);
-    } catch (err) {
-        if (!esErrorDeConexion(err)) throw err;
-        console.warn(`[UsuarioService] Conexión a BD no disponible al buscar para actualizar.`);
-    }
-
-    if (!existente) {
-        existente = fallbackUsuarios.find(u => u.NumeroDocumento === id) || null;
-    }
-
+export const actualizarUsuario = async (
+    id: number,
+    dto: ActualizarUsuarioDto,
+    quienActualiza?: { esAdmin: boolean }
+): Promise<UsuarioNormalizado> => {
+    const existente = await usuarioDao.buscarPorId(id);
     if (!existente) {
         throw new AppError(`Usuario con ID ${id} no encontrado`, 404);
     }
 
-    const usuarioActualizado: Usuario = {
+    const admin = Boolean(quienActualiza?.esAdmin);
+    const nuevoCorreo = admin && dto.Correo !== undefined ? dto.Correo.trim().toLowerCase() : existente.Correo;
+    if (nuevoCorreo.toLowerCase() !== existente.Correo.toLowerCase()) {
+        const otro = await usuarioDao.buscarPorCorreo(nuevoCorreo);
+        if (otro && otro.NumeroDocumento !== id) throw new AppError(`El correo '${nuevoCorreo}' ya se encuentra registrado.`, 409);
+    }
+
+    await usuarioDao.actualizar({
         NumeroDocumento: id,
-        IdRol: dto.IdRol !== undefined ? dto.IdRol : existente.IdRol,
+        IdRol: admin && dto.IdRol !== undefined ? dto.IdRol : existente.IdRol,
         NombreUsuario: dto.NombreUsuario !== undefined ? dto.NombreUsuario.trim() : existente.NombreUsuario,
         ApellidoUsuario: dto.ApellidoUsuario !== undefined ? dto.ApellidoUsuario.trim() : existente.ApellidoUsuario,
         Telefono: dto.Telefono !== undefined ? dto.Telefono.trim() : existente.Telefono,
-        Contrasena: dto.Contrasena !== undefined && dto.Contrasena.trim() !== '' ? dto.Contrasena : existente.Contrasena,
-        Correo: dto.Correo !== undefined ? dto.Correo.trim().toLowerCase() : existente.Correo,
-        Estado: dto.Estado !== undefined ? dto.Estado : existente.Estado
-    };
+        Contrasena: dto.Contrasena !== undefined && dto.Contrasena.trim() !== '' ? await hashContrasena(dto.Contrasena) : existente.Contrasena,
+        Correo: nuevoCorreo,
+        Estado: admin && dto.Estado !== undefined ? dto.Estado : existente.Estado
+    });
 
-    try {
-        await usuarioDao.actualizar(usuarioActualizado);
-        const actualizado = await usuarioDao.buscarPorId(id);
-        if (actualizado) return normalizarUsuario(actualizado);
-    } catch (err) {
-        if (!esErrorDeConexion(err)) throw err;
-        console.warn(`[UsuarioService] Conexión a BD no disponible al actualizar.`);
-    }
-
-    const idx = fallbackUsuarios.findIndex(u => u.NumeroDocumento === id);
-    if (idx !== -1) {
-        fallbackUsuarios[idx] = usuarioActualizado;
-    }
-
-    return normalizarUsuario(usuarioActualizado);
+    const actualizado = await usuarioDao.buscarPorId(id);
+    return normalizarUsuario(actualizado ?? existente);
 };
 
 /**
  * Elimina un usuario por su identificador.
  */
 export const eliminarPorId = async (id: number): Promise<void> => {
-    try {
-        await usuarioDao.eliminarPorId(id);
-    } catch (err) {
-        if (!esErrorDeConexion(err)) throw err;
-        console.warn(`[UsuarioService] Conexión a BD no disponible al eliminar.`);
-    }
-    const idx = fallbackUsuarios.findIndex(u => u.NumeroDocumento === id);
-    if (idx !== -1) {
-        fallbackUsuarios.splice(idx, 1);
-    }
+    await usuarioDao.eliminarPorId(id);
 };
