@@ -21,7 +21,9 @@ export const envConfig = {
             || process.env.SUPABASE_KEY
             || process.env.SUPABASE_PUBLISHABLE_KEY
             || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-            || ''
+            || '',
+        // Bucket público de imágenes de fincas (se crea con db/migraciones/001_imagenes_y_ficha_finca.sql)
+        BUCKET_FINCAS: process.env.SUPABASE_BUCKET_FINCAS || 'fincas-imagenes'
     },
 
     // Seguridad y Autenticación JWT
