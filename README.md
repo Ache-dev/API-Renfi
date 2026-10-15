@@ -288,24 +288,16 @@ Las fotos se alojan en **Supabase Storage** (bucket público `fincas-imagenes`);
 **Orden de despliegue (importante):**
 1. Ejecuta [`db/migraciones/001_imagenes_y_ficha_finca.sql`](db/migraciones/001_imagenes_y_ficha_finca.sql) en el SQL Editor de Supabase (crea el bucket, las columnas de `Imagen` y la ficha de `Finca`; es idempotente).
 2. Despliega esta versión de la API. **Si la API corre antes de la migración, los endpoints de fincas e imágenes responden 500** porque piden columnas que aún no existen.
-3. Ejecuta [`db/seguridad.sql`](db/seguridad.sql) cuando la API ya use la clave secret.
+3. Ejecuta [`db/migraciones/002_eliminar_url_imagen.sql`](db/migraciones/002_eliminar_url_imagen.sql): elimina la columna `Imagen."UrlImagen"` (todas las imágenes viven en Storage). Se detiene sin cambiar nada si alguna imagen aún no tiene `RutaStorage`.
+4. Ejecuta [`db/seguridad.sql`](db/seguridad.sql) cuando la API ya use la clave secret.
+
+Una base **nueva** se arma con `supabase_schema.sql` y luego las migraciones de `db/migraciones/` en orden (001, 002...).
 
 **Subir una imagen** (solo administrador): `POST /api/finca/:id/imagenes`, `multipart/form-data`, campo `imagen` (+ opcionales `TextoAlternativo`, `EsPortada=true`).
 - Máximo 5 MB y 10 imágenes por finca. Acepta JPG, PNG y WebP, validados por su **contenido** (no por el nombre).
 - La API corrige la orientación, elimina los metadatos (EXIF/GPS), reduce a 1600 px y convierte a **WebP** antes de guardar en `finca-{id}/{uuid}.webp`.
-- La primera imagen de una finca queda como **portada**. `PUT /api/imagen/:id` cambia portada, orden o texto alternativo; `DELETE /api/imagen/:id` borra la fila y el archivo (y la siguiente imagen pasa a ser portada). `POST /api/imagen` registra una URL externa (solo https).
-- `GET /api/finca` y `GET /api/finca/:id` devuelven `Imagenes` (portada primero, con la URL final de cada una) y `UrlPortada`.
-
-**Migrar imágenes con URL externa a Storage** (una sola vez, o cuando se registren más por URL):
-
-```bash
-npm run migrar:imagenes                  # simula: lista lo pendiente sin descargar ni escribir
-npm run migrar:imagenes -- --ejecutar    # migra de verdad (SUPABASE_KEY debe ser la clave secret)
-```
-
-- Descarga cada imagen (solo `https` hacia hosts públicos; se bloquean IPs internas y se validan las redirecciones; máx. 15 MB), la optimiza a WebP y la sube a `finca-{id}/{uuid}.webp`.
-- Es **idempotente**: solo toma las imágenes sin `RutaStorage`, así que se puede repetir. Una imagen que falla no detiene a las demás y el script termina con código 1 e informa el motivo.
-- `UrlImagen` se conserva como registro del origen; la URL que reciben los clientes sale de `RutaStorage`. Para **revertir** una imagen basta `UPDATE "Imagen" SET "RutaStorage" = NULL WHERE "IdImagen" = ...`.
+- La primera imagen de una finca queda como **portada**. `PUT /api/imagen/:id` cambia portada, orden o texto alternativo; `DELETE /api/imagen/:id` borra la fila y el archivo (y la siguiente imagen pasa a ser portada). Las imágenes solo se crean subiendo el archivo (ya no existen las URL externas).
+- `GET /api/finca` y `GET /api/finca/:id` devuelven `Imagenes` (portada primero) y `UrlPortada`. `UrlImagen` ya no es una columna: es un campo que la API calcula con la URL pública del archivo (`RutaStorage`), para que los clientes lo muestren tal cual.
 
 **Ficha de la finca** (se envía en `POST/PUT /api/finca`): `Habitaciones`, `Banos`, `Camas`, `NochesMinimas`, `Comodidades` (lista o texto separado por comas), `Reglas`, `HoraEntrada`/`HoraSalida` (`HH:MM`), `PermiteMascotas`, `PermiteEventos`, `Latitud`/`Longitud` (deben ir juntas). La API valida rangos y la base los refuerza con restricciones.
 
