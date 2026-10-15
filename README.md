@@ -274,9 +274,29 @@ La API es la **única puerta de entrada** a la base de datos: las apps (Expo, An
 | `POST /reserva`, `POST /pago` | No | A su nombre; el monto lo calcula la API | Cualquiera |
 | `GET /reserva/usuario/:doc`, `GET /reserva|factura|pago/:id` | No | Solo lo propio | Todo |
 | `PUT /reserva/:id` | No | Solo cancelar la propia | Todo |
+| Subir, editar y borrar imágenes de fincas | No | No | Sí |
 | Listados completos, reportes, roles, y escritura de catálogos | No | No | Sí |
 
 Para cerrar una base Supabase ya creada ejecuta [`db/seguridad.sql`](db/seguridad.sql) (después de desplegar la API con la clave secret).
+
+---
+
+## 🖼️ Imágenes y ficha de las fincas
+
+Las fotos se alojan en **Supabase Storage** (bucket público `fincas-imagenes`); la base de datos guarda solo la ruta y los metadatos.
+
+**Orden de despliegue (importante):**
+1. Ejecuta [`db/migraciones/001_imagenes_y_ficha_finca.sql`](db/migraciones/001_imagenes_y_ficha_finca.sql) en el SQL Editor de Supabase (crea el bucket, las columnas de `Imagen` y la ficha de `Finca`; es idempotente).
+2. Despliega esta versión de la API. **Si la API corre antes de la migración, los endpoints de fincas e imágenes responden 500** porque piden columnas que aún no existen.
+3. Ejecuta [`db/seguridad.sql`](db/seguridad.sql) cuando la API ya use la clave secret.
+
+**Subir una imagen** (solo administrador): `POST /api/finca/:id/imagenes`, `multipart/form-data`, campo `imagen` (+ opcionales `TextoAlternativo`, `EsPortada=true`).
+- Máximo 5 MB y 10 imágenes por finca. Acepta JPG, PNG y WebP, validados por su **contenido** (no por el nombre).
+- La API corrige la orientación, elimina los metadatos (EXIF/GPS), reduce a 1600 px y convierte a **WebP** antes de guardar en `finca-{id}/{uuid}.webp`.
+- La primera imagen de una finca queda como **portada**. `PUT /api/imagen/:id` cambia portada, orden o texto alternativo; `DELETE /api/imagen/:id` borra la fila y el archivo (y la siguiente imagen pasa a ser portada). `POST /api/imagen` registra una URL externa (solo https).
+- `GET /api/finca` y `GET /api/finca/:id` devuelven `Imagenes` (portada primero, con la URL final de cada una) y `UrlPortada`.
+
+**Ficha de la finca** (se envía en `POST/PUT /api/finca`): `Habitaciones`, `Banos`, `Camas`, `NochesMinimas`, `Comodidades` (lista o texto separado por comas), `Reglas`, `HoraEntrada`/`HoraSalida` (`HH:MM`), `PermiteMascotas`, `PermiteEventos`, `Latitud`/`Longitud` (deben ir juntas). La API valida rangos y la base los refuerza con restricciones.
 
 ---
 
