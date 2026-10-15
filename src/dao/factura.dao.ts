@@ -1,52 +1,56 @@
-import { query } from "../conexion/connection";
+import getSupabase, { unwrap, unwrapOne } from "../conexion/supabase";
 import { Factura } from "../models/factura";
+
+const SELECT_FACTURA = 'IdFactura, IdReserva, FechaFactura, Total, Reserva(IdReserva, NumeroDocumentoUsuario, FechaReserva, Estado, Finca(IdFinca, NombreFinca, Precio, Municipio(NombreMunicipio), Usuario(NumeroDocumento, NombreUsuario, ApellidoUsuario)))';
+
+const aFecha = (valor?: Date | string): string => (valor instanceof Date ? valor : new Date(valor || Date.now())).toISOString();
+
+const aplanar = (f: any): Factura => {
+    const { Reserva: r, ...base } = f;
+    const finca = r?.Finca;
+    return {
+        ...base,
+        NumeroDocumentoCliente: r?.NumeroDocumentoUsuario ?? null,
+        FechaReserva: r?.FechaReserva ?? null,
+        EstadoReserva: r?.Estado ?? null,
+        IdFinca: finca?.IdFinca ?? null,
+        NombreFinca: finca?.NombreFinca ?? null,
+        PrecioFinca: finca?.Precio ?? null,
+        NombreMunicipio: finca?.Municipio?.NombreMunicipio ?? null,
+        IdPropietario: finca?.Usuario?.NumeroDocumento ?? null,
+        NombrePropietario: finca?.Usuario?.NombreUsuario ?? null,
+        ApellidoPropietario: finca?.Usuario?.ApellidoUsuario ?? null
+    };
+};
 
 /**
  * Lista todas las facturas registradas.
  */
 export const listar = async (): Promise<Factura[]> => {
-    const rs = await query<Factura>('SELECT * FROM public."SP_ListarFacturas"()');
-    return rs.rows;
+    const filas: any[] = await unwrap(getSupabase().from('Factura').select(SELECT_FACTURA).order('IdFactura', { ascending: false }));
+    return filas.map(aplanar);
 };
 
 /**
  * Inserta una nueva factura y retorna el IdFactura generado.
  */
 export const insertar = async (factura: Factura): Promise<number> => {
-    const fechaFactura = factura.FechaFactura instanceof Date ? factura.FechaFactura : new Date(factura.FechaFactura || Date.now());
-
-    const rs = await query<{ IdFactura: number }>(
-        'SELECT public."SP_RegistrarFactura"($1, $2, $3) AS "IdFactura"',
-        [factura.IdReserva, fechaFactura, factura.Total]
+    const fila = await unwrapOne(
+        getSupabase().from('Factura')
+            .insert({ IdReserva: factura.IdReserva, FechaFactura: aFecha(factura.FechaFactura), Total: factura.Total })
+            .select('IdFactura').single()
     );
-
-    const idFactura = rs.rows[0]?.IdFactura;
-    if (idFactura) {
-        return Number(idFactura);
-    }
-
-    const fallback = await query<{ IdFactura: number }>(
-        'SELECT "IdFactura" FROM public."Factura" WHERE "IdReserva" = $1 ORDER BY "IdFactura" DESC LIMIT 1',
-        [factura.IdReserva]
-    );
-
-    const fallbackId = fallback.rows[0]?.IdFactura;
-    if (fallbackId) {
-        return Number(fallbackId);
-    }
-
-    throw new Error('No se pudo obtener el identificador de la factura creada.');
+    return Number(fila.IdFactura);
 };
 
 /**
  * Actualiza una factura existente.
  */
 export const actualizar = async (factura: Factura): Promise<void> => {
-    const fechaFactura = factura.FechaFactura instanceof Date ? factura.FechaFactura : new Date(factura.FechaFactura || Date.now());
-
-    await query(
-        'SELECT public."SP_ActualizarFactura"($1, $2, $3, $4)',
-        [factura.IdFactura, factura.IdReserva, fechaFactura, factura.Total]
+    await unwrap(
+        getSupabase().from('Factura')
+            .update({ IdReserva: factura.IdReserva, FechaFactura: aFecha(factura.FechaFactura), Total: factura.Total })
+            .eq('IdFactura', factura.IdFactura)
     );
 };
 
@@ -54,33 +58,13 @@ export const actualizar = async (factura: Factura): Promise<void> => {
  * Elimina una factura por su ID.
  */
 export const eliminarPorId = async (id: number): Promise<void> => {
-    await query('DELETE FROM public."Factura" WHERE "IdFactura" = $1', [id]);
+    await unwrap(getSupabase().from('Factura').delete().eq('IdFactura', id));
 };
 
 /**
  * Busca una factura por su ID con datos relacionados de la reserva.
  */
 export const buscarPorId = async (id: number): Promise<Factura | null> => {
-    const rs = await query<Factura>(
-        `SELECT 
-            Fa."IdFactura", 
-            Fa."IdReserva", 
-            Fa."FechaFactura", 
-            Fa."Total",
-            R."Estado" AS "EstadoReserva",
-            F."NombreFinca",
-            F."Precio" AS "PrecioFinca",
-            M."NombreMunicipio",
-            U."NumeroDocumento" AS "IdPropietario",
-            U."NombreUsuario" AS "NombrePropietario",
-            U."ApellidoUsuario" AS "ApellidoPropietario"
-        FROM public."Factura" Fa
-        LEFT JOIN public."Reserva" R ON Fa."IdReserva" = R."IdReserva"
-        LEFT JOIN public."Finca" F ON R."IdFinca" = F."IdFinca"
-        LEFT JOIN public."Municipio" M ON F."IdMunicipio" = M."IdMunicipio"
-        LEFT JOIN public."Usuario" U ON F."NumeroDocumentoUsuario" = U."NumeroDocumento"
-        WHERE Fa."IdFactura" = $1`,
-        [id]
-    );
-    return rs.rows[0] || null;
+    const fila = await unwrap(getSupabase().from('Factura').select(SELECT_FACTURA).eq('IdFactura', id).maybeSingle());
+    return fila ? aplanar(fila) : null;
 };

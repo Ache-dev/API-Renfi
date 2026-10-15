@@ -10,6 +10,7 @@ export interface Pago {
     EstadoPago: string;
 
     // Campos del JOIN con MetodoDePago y Factura
+    NumeroDocumentoCliente?: number | undefined;
     NombreMetodoDePago?: string | undefined;
     TotalFactura?: number | undefined;
     IdReserva?: number | undefined;

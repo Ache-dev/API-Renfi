@@ -8,6 +8,7 @@ export interface Factura {
     Total: number;
 
     // Campos del JOIN opcionales
+    NumeroDocumentoCliente?: number | undefined;
     EstadoReserva?: string | undefined;
     NombreFinca?: string | undefined;
     PrecioFinca?: number | undefined;

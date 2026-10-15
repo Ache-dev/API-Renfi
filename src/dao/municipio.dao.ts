@@ -1,72 +1,66 @@
-import { query } from "../conexion/connection";
+import getSupabase, { unwrap, unwrapOne, contar } from "../conexion/supabase";
 import { Municipio, MunicipioReporte } from "../models/municipio";
 
 export type { MunicipioReporte };
 
 /**
- * Reporte: Municipios con mayor número de reservas.
+ * Reporte: reservas por finca y municipio, de mayor a menor.
  */
 export const municipiosConMasReservas = async (): Promise<MunicipioReporte[]> => {
-    const rs = await query<MunicipioReporte>('SELECT * FROM public."SP_MunicipiosConMasReservas"()');
-    return rs.rows;
+    const filas: any[] = await unwrap(
+        getSupabase().from('Reserva').select('IdFinca, Finca!inner(NombreFinca, Municipio!inner(NombreMunicipio))')
+    );
+    const grupos = new Map<number, MunicipioReporte>();
+    for (const r of filas) {
+        const g = grupos.get(r.IdFinca) ?? {
+            NombreMunicipio: r.Finca.Municipio.NombreMunicipio,
+            IdFinca: r.IdFinca,
+            NombreFinca: r.Finca.NombreFinca,
+            TotalReservas: 0
+        };
+        g.TotalReservas++;
+        grupos.set(r.IdFinca, g);
+    }
+    return [...grupos.values()].sort((a, b) => b.TotalReservas - a.TotalReservas);
 };
 
 /**
  * Lista todos los municipios.
  */
 export const listar = async (): Promise<Municipio[]> => {
-    const rs = await query<Municipio>('SELECT * FROM public."SP_ListarMunicipios"()');
-    return rs.rows;
+    return unwrap(getSupabase().from('Municipio').select('IdMunicipio, NombreMunicipio').order('IdMunicipio')) as Promise<Municipio[]>;
 };
 
 /**
  * Inserta un nuevo municipio y retorna el IdMunicipio generado.
  */
 export const insertar = async (municipio: Municipio): Promise<number> => {
-    const rs = await query<{ IdMunicipio: number }>(
-        'SELECT public."SP_RegistrarMunicipio"($1) AS "IdMunicipio"',
-        [municipio.NombreMunicipio]
-    );
-
-    const id = rs.rows[0]?.IdMunicipio;
-    if (!id) {
-        throw new Error('No se pudo obtener el identificador del municipio creado.');
-    }
-    return Number(id);
+    const fila = await unwrapOne(getSupabase().from('Municipio').insert({ NombreMunicipio: municipio.NombreMunicipio }).select('IdMunicipio').single());
+    return Number(fila.IdMunicipio);
 };
 
 /**
  * Actualiza un municipio existente.
  */
 export const actualizar = async (municipio: Municipio): Promise<void> => {
-    await query(
-        'SELECT public."SP_ActualizarMunicipio"($1, $2)',
-        [municipio.IdMunicipio, municipio.NombreMunicipio]
-    );
+    await unwrap(getSupabase().from('Municipio').update({ NombreMunicipio: municipio.NombreMunicipio }).eq('IdMunicipio', municipio.IdMunicipio));
 };
 
 /**
  * Elimina un municipio por su ID.
  */
 export const eliminarPorId = async (id: number): Promise<void> => {
-    await query('DELETE FROM public."Municipio" WHERE "IdMunicipio" = $1', [id]);
+    await unwrap(getSupabase().from('Municipio').delete().eq('IdMunicipio', id));
 };
 
 /**
  * Busca un municipio por su ID.
  */
 export const buscarPorId = async (id: number): Promise<Municipio | null> => {
-    const rs = await query<Municipio>(
-        'SELECT "IdMunicipio", "NombreMunicipio" FROM public."Municipio" WHERE "IdMunicipio" = $1',
-        [id]
-    );
-    return rs.rows[0] || null;
+    return unwrap(getSupabase().from('Municipio').select('IdMunicipio, NombreMunicipio').eq('IdMunicipio', id).maybeSingle()) as Promise<Municipio | null>;
 };
 
 /**
  * Cuenta registros de Finca que referencian al id (el esquema usa ON DELETE SET NULL).
  */
-export const contarReferencias = async (id: number): Promise<number> => {
-    const rs = await query<{ n: string }>('SELECT COUNT(*) AS n FROM public."Finca" WHERE "IdMunicipio" = $1', [id]);
-    return Number(rs.rows[0]?.n ?? 0);
-};
+export const contarReferencias = (id: number): Promise<number> => contar('Finca', 'IdMunicipio', id);

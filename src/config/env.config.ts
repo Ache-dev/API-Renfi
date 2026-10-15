@@ -13,25 +13,22 @@ export const envConfig = {
     NODE_ENV: process.env.NODE_ENV || 'development',
     PORT: Number(process.env.PORT) || 3000,
 
-    // Base de datos PostgreSQL / Supabase
-    DB: {
-        // Postgres embebido (PGlite): activo salvo que haya DATABASE_URL o DB_EMBEDDED=false
-        EMBEDDED: process.env.DB_EMBEDDED ? process.env.DB_EMBEDDED !== 'false' : !process.env.DATABASE_URL,
-        // Instantánea de PGlite (.tgz con escritura atómica) o memory:// para una BD volátil (tests)
-        EMBEDDED_FILE: process.env.DB_EMBEDDED_FILE || (process.env.DB_EMBEDDED_DIR === 'memory://' ? 'memory://' : './.pglite.tgz'),
-        CONNECTION_STRING: process.env.DATABASE_URL || '',
-        HOST: process.env.DB_HOST || process.env.PGHOST || 'localhost',
-        PORT: Number(process.env.DB_PORT || process.env.PGPORT) || 5432,
-        USER: process.env.DB_USER || process.env.PGUSER || 'postgres',
-        PASSWORD: process.env.DB_PASSWORD || process.env.PGPASSWORD || 'postgres',
-        DATABASE: process.env.DB_DATABASE || process.env.PGDATABASE || 'postgres',
-        SSL: process.env.DB_SSL === 'true' || (Boolean(process.env.DATABASE_URL) && !(process.env.DATABASE_URL || '').includes('localhost'))
+    // Base de datos: Supabase (PostgREST). Acepta la clave publishable o la secret.
+    // Se mantienen los nombres NEXT_PUBLIC_* para reutilizar el .env de Renfi-ExpoGo.
+    SUPABASE: {
+        URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        KEY: process.env.SUPABASE_SECRET_KEY
+            || process.env.SUPABASE_KEY
+            || process.env.SUPABASE_PUBLISHABLE_KEY
+            || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+            || ''
     },
 
     // Seguridad y Autenticación JWT
     JWT: {
-        SECRET: process.env.JWT_SECRET || 'renfi_jwt_super_secret_key_2025_safe_token',
-        EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d'
+        // Sin valor por defecto: un secreto público en el repositorio permitiría falsificar tokens de administrador.
+        SECRET: process.env.JWT_SECRET || (process.env.NODE_ENV === 'test' ? 'secreto-solo-para-pruebas' : ''),
+        EXPIRES_IN: process.env.JWT_EXPIRES_IN || '1d'
     },
 
     // CORS
@@ -40,3 +37,6 @@ export const envConfig = {
 
 export default envConfig;
 
+if (envConfig.JWT.SECRET.length < 32) {
+    throw new Error('Define JWT_SECRET en el .env con al menos 32 caracteres (generalo con crypto.randomBytes(48).toString("hex")).');
+}

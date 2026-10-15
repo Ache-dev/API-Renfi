@@ -1,68 +1,74 @@
-import { query } from "../conexion/connection";
-import { 
-    Finca, 
-    FincaReservada, 
-    FincaPromedioCalificacion, 
-    FincaIngresos, 
-    FincaIngresosTop 
+import getSupabase, { unwrap, unwrapOne } from "../conexion/supabase";
+import {
+    Finca,
+    FincaReservada,
+    FincaPromedioCalificacion,
+    FincaIngresos,
+    FincaIngresosTop
 } from "../models/finca";
 
-export type { 
-    FincaReservada, 
-    FincaPromedioCalificacion, 
-    FincaIngresos, 
-    FincaIngresosTop 
+export type {
+    FincaReservada,
+    FincaPromedioCalificacion,
+    FincaIngresos,
+    FincaIngresosTop
 };
+
+const SELECT_FINCA = 'IdFinca, IdMunicipio, NumeroDocumentoUsuario, NombreFinca, Direccion, InformacionAdicional, Capacidad, Precio, Estado, Calificacion, Municipio(NombreMunicipio), Usuario(NumeroDocumento, NombreUsuario, ApellidoUsuario, Telefono, Correo), Imagen(IdImagen, UrlImagen, IdFinca)';
+
+const aplanar = ({ Municipio: m, Usuario: u, Imagen: imagenes, ...f }: any): Finca => ({
+    ...f,
+    Imagenes: imagenes ?? [],
+    NombreMunicipio: m?.NombreMunicipio ?? null,
+    IdPropietario: u?.NumeroDocumento ?? null,
+    NombrePropietario: u?.NombreUsuario ?? null,
+    ApellidoPropietario: u?.ApellidoUsuario ?? null,
+    TelefonoPropietario: u?.Telefono ?? null,
+    CorreoPropietario: u?.Correo ?? null,
+    Dueno: u?.NombreUsuario ?? null
+});
 
 /**
  * Lista todas las fincas con información de municipio y propietario.
  */
 export const listar = async (): Promise<Finca[]> => {
-    const rs = await query<Finca>('SELECT * FROM public."SP_ListarFincas"()');
-    return rs.rows;
+    const filas: any[] = await unwrap(getSupabase().from('Finca').select(SELECT_FINCA).order('IdFinca'));
+    return filas.map(aplanar);
 };
 
 /**
  * Inserta una nueva finca y retorna el IdFinca generado.
  */
 export const insertar = async (finca: Finca): Promise<number> => {
-    const rs = await query<{ IdFinca: number }>(
-        'SELECT public."SP_InsertarFinca"($1, $2, $3, $4, $5, $6, $7, $8, $9) AS "IdFinca"',
-        [
-            finca.IdMunicipio,
-            finca.NumeroDocumentoUsuario,
-            finca.NombreFinca,
-            finca.Direccion,
-            finca.InformacionAdicional ?? null,
-            finca.Capacidad ?? 0,
-            finca.Precio ?? 0,
-            finca.Estado ?? 'Disponible',
-            finca.Calificacion ?? 5
-        ]
+    const fila = await unwrapOne(
+        getSupabase().from('Finca').insert({
+            IdMunicipio: finca.IdMunicipio,
+            NumeroDocumentoUsuario: finca.NumeroDocumentoUsuario,
+            NombreFinca: finca.NombreFinca,
+            Direccion: finca.Direccion,
+            InformacionAdicional: finca.InformacionAdicional ?? null,
+            Capacidad: finca.Capacidad ?? 0,
+            Precio: finca.Precio ?? 0,
+            Estado: finca.Estado ?? 'Disponible',
+            Calificacion: finca.Calificacion ?? 5
+        }).select('IdFinca').single()
     );
-
-    const nuevoId = rs.rows[0]?.IdFinca;
-    if (!nuevoId) {
-        throw new Error('No se pudo obtener el identificador de la finca creada.');
-    }
-    return Number(nuevoId);
+    return Number(fila.IdFinca);
 };
 
 /**
  * Actualiza los datos de una finca existente.
  */
 export const actualizar = async (finca: Finca): Promise<void> => {
-    await query(
-        'SELECT public."SP_ActualizarFinca"($1, $2, $3, $4, $5, $6, $7)',
-        [
-            finca.IdFinca,
-            finca.NombreFinca,
-            finca.Direccion,
-            finca.InformacionAdicional ?? null,
-            finca.Capacidad ?? 0,
-            finca.Precio ?? 0,
-            finca.Estado ?? 'Disponible'
-        ]
+    await unwrap(
+        getSupabase().from('Finca').update({
+            NombreFinca: finca.NombreFinca,
+            Direccion: finca.Direccion,
+            InformacionAdicional: finca.InformacionAdicional ?? null,
+            Capacidad: finca.Capacidad ?? 0,
+            Precio: finca.Precio ?? 0,
+            Estado: finca.Estado ?? 'Disponible'
+        }).eq('IdFinca', finca.IdFinca)
     );
 };
 
@@ -70,58 +76,62 @@ export const actualizar = async (finca: Finca): Promise<void> => {
  * Elimina una finca por su identificador.
  */
 export const eliminarPorId = async (id: number): Promise<void> => {
-    await query('DELETE FROM public."Finca" WHERE "IdFinca" = $1', [id]);
+    await unwrap(getSupabase().from('Finca').delete().eq('IdFinca', id));
 };
 
 /**
  * Busca una finca por su identificador incluyendo datos del propietario y municipio.
  */
 export const buscarPorId = async (id: number): Promise<Finca | null> => {
-    const rs = await query<Finca>(
-        `SELECT 
-            F."IdFinca", 
-            F."IdMunicipio", 
-            F."NumeroDocumentoUsuario", 
-            F."NombreFinca", 
-            F."Direccion", 
-            F."InformacionAdicional", 
-            F."Capacidad", 
-            F."Precio", 
-            F."Estado", 
-            F."Calificacion", 
-            M."NombreMunicipio", 
-            U."NumeroDocumento" AS "IdPropietario",
-            U."NombreUsuario" AS "NombrePropietario",
-            U."ApellidoUsuario" AS "ApellidoPropietario",
-            U."Telefono" AS "TelefonoPropietario",
-            U."Correo" AS "CorreoPropietario",
-            U."NombreUsuario" AS "Dueno"
-        FROM public."Finca" F 
-        LEFT JOIN public."Municipio" M ON F."IdMunicipio" = M."IdMunicipio" 
-        LEFT JOIN public."Usuario" U ON F."NumeroDocumentoUsuario" = U."NumeroDocumento" 
-        WHERE F."IdFinca" = $1`,
-        [id]
-    );
-    return rs.rows[0] || null;
+    const fila = await unwrap(getSupabase().from('Finca').select(SELECT_FINCA).eq('IdFinca', id).maybeSingle());
+    return fila ? aplanar(fila) : null;
 };
 
-// Reportes
+// Reportes (se agregan en memoria; el volumen de una API de fincas lo permite)
+
 export const fincasMasReservadas = async (): Promise<FincaReservada[]> => {
-    const rs = await query<FincaReservada>('SELECT * FROM public."SP_FincasMasReservadas"()');
-    return rs.rows;
+    const filas: any[] = await unwrap(getSupabase().from('Reserva').select('IdFinca, Finca!inner(NombreFinca)'));
+    const grupos = new Map<number, any>();
+    for (const r of filas) {
+        const g = grupos.get(r.IdFinca) ?? { IdFinca: r.IdFinca, NombreFinca: r.Finca.NombreFinca, CantidadReservas: 0 };
+        g.CantidadReservas++;
+        grupos.set(r.IdFinca, g);
+    }
+    return [...grupos.values()].sort((a, b) => b.CantidadReservas - a.CantidadReservas).slice(0, 5);
 };
 
 export const promedioCalificacionFincas = async (): Promise<FincaPromedioCalificacion[]> => {
-    const rs = await query<FincaPromedioCalificacion>('SELECT * FROM public."SP_PromedioCalificacionFincas"()');
-    return rs.rows;
+    const filas: any[] = await unwrap(
+        getSupabase().from('Finca').select('IdFinca, NombreFinca, Calificacion').not('Calificacion', 'is', null)
+    );
+    return filas
+        .map(f => ({ IdFinca: f.IdFinca, NombreFinca: f.NombreFinca, PromedioCalificacion: Math.round(Number(f.Calificacion) * 100) / 100 }))
+        .sort((a, b) => b.PromedioCalificacion - a.PromedioCalificacion);
+};
+
+/**
+ * Suma de pagos en estado 'Pagado' por finca, de mayor a menor.
+ */
+const ingresosPorFinca = async (): Promise<{ IdFinca: number; NombreFinca: string; total: number }[]> => {
+    const filas: any[] = await unwrap(
+        getSupabase().from('Pago')
+            .select('Monto, Factura!inner(Reserva!inner(Finca!inner(IdFinca, NombreFinca)))')
+            .eq('EstadoPago', 'Pagado')
+    );
+    const grupos = new Map<number, { IdFinca: number; NombreFinca: string; total: number }>();
+    for (const p of filas) {
+        const f = p.Factura.Reserva.Finca;
+        const g = grupos.get(f.IdFinca) ?? { IdFinca: f.IdFinca, NombreFinca: f.NombreFinca, total: 0 };
+        g.total += Number(p.Monto ?? 0);
+        grupos.set(f.IdFinca, g);
+    }
+    return [...grupos.values()].sort((a, b) => b.total - a.total);
 };
 
 export const totalIngresosPorFinca = async (): Promise<FincaIngresos[]> => {
-    const rs = await query<FincaIngresos>('SELECT * FROM public."SP_TotalIngresosPorFinca"()');
-    return rs.rows;
+    return (await ingresosPorFinca()).map(({ total, ...f }) => ({ ...f, TotalIngresos: total }));
 };
 
 export const fincasConMasIngresos = async (): Promise<FincaIngresosTop[]> => {
-    const rs = await query<FincaIngresosTop>('SELECT * FROM public."SP_FincasConMasIngresos"()');
-    return rs.rows;
+    return (await ingresosPorFinca()).slice(0, 5).map(({ total, ...f }) => ({ ...f, IngresosTotales: total }));
 };

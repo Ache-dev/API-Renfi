@@ -19,6 +19,7 @@ export interface Finca {
     TelefonoPropietario?: string | undefined;
     CorreoPropietario?: string | undefined;
     Dueno?: string | undefined;
+    Imagenes?: { IdImagen: number; UrlImagen: string; IdFinca: number }[] | undefined;
 }
 
 /**

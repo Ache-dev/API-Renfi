@@ -1,60 +1,53 @@
-import { query } from "../conexion/connection";
+import getSupabase, { unwrap, unwrapOne } from "../conexion/supabase";
 import { Usuario } from "../models/usuario";
+
+const COLUMNAS = 'NumeroDocumento, IdRol, NombreUsuario, ApellidoUsuario, Telefono, Correo, Contrasena, Estado, Rol(NombreRol)';
+
+// ilike trata % y _ como comodines: se escapan para comparar el correo de forma literal.
+const literal = (texto: string) => texto.replace(/[\\%_]/g, '\\$&');
+
+const aplanar = ({ Rol, ...u }: any): Usuario => ({ ...u, NombreRol: Rol?.NombreRol ?? null });
 
 /**
  * Obtiene la lista de todos los usuarios registrados.
  */
 export const listar = async (): Promise<Usuario[]> => {
-    const rs = await query<Usuario>('SELECT * FROM public."SP_ListarUsuarios"()');
-    return rs.rows;
+    const filas: any[] = await unwrap(getSupabase().from('Usuario').select(COLUMNAS).order('NumeroDocumento'));
+    return filas.map(aplanar);
 };
 
 /**
  * Inserta un nuevo usuario y retorna el NumeroDocumento generado.
  */
 export const insertar = async (usuario: Usuario): Promise<number> => {
-    const rs = await query<{ NumeroDocumento: number }>(
-        'SELECT public."SP_RegistrarUsuario"($1, $2, $3, $4, $5, $6, $7) AS "NumeroDocumento"',
-        [
-            usuario.IdRol ?? 2, // Por defecto rol 2 (Usuario/Cliente)
-            usuario.NombreUsuario,
-            usuario.ApellidoUsuario,
-            usuario.Telefono ?? null,
-            usuario.Correo,
-            usuario.Contrasena ?? '',
-            usuario.Estado ?? 'Activo'
-        ]
+    const fila = await unwrapOne(
+        getSupabase().from('Usuario').insert({
+            IdRol: usuario.IdRol ?? 2, // Por defecto rol 2 (Usuario/Cliente)
+            NombreUsuario: usuario.NombreUsuario,
+            ApellidoUsuario: usuario.ApellidoUsuario,
+            Telefono: usuario.Telefono ?? null,
+            Correo: usuario.Correo,
+            Contrasena: usuario.Contrasena ?? '',
+            Estado: usuario.Estado ?? 'Activo'
+        }).select('NumeroDocumento').single()
     );
-
-    const nuevoId = rs.rows[0]?.NumeroDocumento;
-    if (nuevoId) {
-        return Number(nuevoId);
-    }
-
-    // Fallback: buscar por correo si no vino NumeroDocumento directo
-    const encontrado = await buscarPorCorreo(usuario.Correo);
-    if (encontrado?.NumeroDocumento) {
-        return encontrado.NumeroDocumento;
-    }
-
-    throw new Error('No se pudo obtener el identificador del usuario registrado.');
+    return Number(fila.NumeroDocumento);
 };
 
 /**
  * Actualiza los datos de un usuario existente.
  */
 export const actualizar = async (usuario: Usuario): Promise<void> => {
-    await query(
-        'SELECT public."SP_ActualizarUsuario"($1, $2, $3, $4, $5, $6, $7)',
-        [
-            usuario.NumeroDocumento,
-            usuario.IdRol,
-            usuario.NombreUsuario,
-            usuario.ApellidoUsuario,
-            usuario.Telefono ?? null,
-            usuario.Contrasena ?? '',
-            usuario.Estado ?? 'Activo'
-        ]
+    await unwrap(
+        getSupabase().from('Usuario').update({
+            IdRol: usuario.IdRol,
+            NombreUsuario: usuario.NombreUsuario,
+            ApellidoUsuario: usuario.ApellidoUsuario,
+            Telefono: usuario.Telefono ?? null,
+            Correo: usuario.Correo,
+            Contrasena: usuario.Contrasena ?? '',
+            Estado: usuario.Estado ?? 'Activo'
+        }).eq('NumeroDocumento', usuario.NumeroDocumento)
     );
 };
 
@@ -62,62 +55,39 @@ export const actualizar = async (usuario: Usuario): Promise<void> => {
  * Elimina un usuario por su número de documento.
  */
 export const eliminarPorId = async (numeroDocumento: number): Promise<void> => {
-    await query('DELETE FROM public."Usuario" WHERE "NumeroDocumento" = $1', [numeroDocumento]);
+    await unwrap(getSupabase().from('Usuario').delete().eq('NumeroDocumento', numeroDocumento));
 };
 
 /**
  * Busca un usuario por su número de documento (incluye Correo y NombreRol).
  */
 export const buscarPorId = async (numeroDocumento: number): Promise<Usuario | null> => {
-    const rs = await query<Usuario>(
-        `SELECT 
-            U."NumeroDocumento", 
-            U."IdRol", 
-            U."NombreUsuario", 
-            U."ApellidoUsuario", 
-            U."Telefono", 
-            U."Correo",
-            U."Contrasena", 
-            U."Estado", 
-            R."NombreRol" 
-        FROM public."Usuario" U 
-        LEFT JOIN public."Rol" R ON U."IdRol" = R."IdRol" 
-        WHERE U."NumeroDocumento" = $1`,
-        [numeroDocumento]
-    );
-    return rs.rows[0] || null;
+    const fila = await unwrap(getSupabase().from('Usuario').select(COLUMNAS).eq('NumeroDocumento', numeroDocumento).maybeSingle());
+    return fila ? aplanar(fila) : null;
 };
 
 /**
  * Busca un usuario por su correo electrónico.
  */
 export const buscarPorCorreo = async (correo: string): Promise<Usuario | null> => {
-    const rs = await query<Usuario>(
-        `SELECT 
-            U."NumeroDocumento", 
-            U."IdRol", 
-            U."NombreUsuario", 
-            U."ApellidoUsuario", 
-            U."Telefono", 
-            U."Correo", 
-            U."Contrasena", 
-            U."Estado", 
-            R."NombreRol" 
-        FROM public."Usuario" U 
-        LEFT JOIN public."Rol" R ON U."IdRol" = R."IdRol" 
-        WHERE LOWER(U."Correo") = LOWER($1)`,
-        [correo.trim()]
+    const fila = await unwrap(
+        getSupabase().from('Usuario').select(COLUMNAS).ilike('Correo', literal(correo.trim())).limit(1).maybeSingle()
     );
-    return rs.rows[0] || null;
+    return fila ? aplanar(fila) : null;
 };
 
 /**
- * Ejecuta el inicio de sesión contra la base de datos.
+ * Inicio de sesión: correo + contraseña de un usuario activo (no devuelve la contraseña).
  */
 export const login = async (correo: string, contrasena: string): Promise<Usuario | null> => {
-    const rs = await query<Usuario>(
-        'SELECT * FROM public."SP_IniciarSesion"($1, $2)',
-        [correo.trim(), contrasena]
+    const fila = await unwrap(
+        getSupabase().from('Usuario').select(COLUMNAS)
+            .ilike('Correo', literal(correo.trim()))
+            .eq('Contrasena', contrasena)
+            .eq('Estado', 'Activo')
+            .limit(1).maybeSingle()
     );
-    return rs.rows[0] || null;
+    if (!fila) return null;
+    const { Contrasena: _omitida, ...usuario } = aplanar(fila);
+    return usuario as Usuario;
 };

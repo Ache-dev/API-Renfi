@@ -1,48 +1,48 @@
-import { query } from "../conexion/connection";
+import getSupabase, { unwrap, unwrapOne } from "../conexion/supabase";
 import { Imagen } from "../models/imagen";
 
 /**
- * Lista todas las imágenes registradas.
+ * Lista todas las imágenes registradas con datos de su finca.
  */
 export const listar = async (): Promise<Imagen[]> => {
-    const rs = await query<Imagen>('SELECT * FROM public."SP_ListarImagenes"()');
-    return rs.rows;
+    const filas: any[] = await unwrap(
+        getSupabase().from('Imagen')
+            .select('IdImagen, UrlImagen, IdFinca, Finca!inner(NombreFinca, Direccion, Municipio!inner(NombreMunicipio), Usuario!inner(NombreUsuario, ApellidoUsuario))')
+            .order('IdImagen')
+    );
+    return filas.map(({ Finca: f, ...i }) => ({
+        ...i,
+        NombreFinca: f.NombreFinca,
+        Direccion: f.Direccion,
+        NombreMunicipio: f.Municipio.NombreMunicipio,
+        NombrePropietario: f.Usuario.NombreUsuario,
+        ApellidoPropietario: f.Usuario.ApellidoUsuario
+    }));
 };
 
 /**
  * Obtiene todas las imágenes asociadas a una finca específica.
  */
 export const buscarPorIdFinca = async (idFinca: number): Promise<Imagen[]> => {
-    const rs = await query<Imagen>(
-        'SELECT "IdImagen", "UrlImagen", "IdFinca" FROM public."Imagen" WHERE "IdFinca" = $1',
-        [idFinca]
-    );
-    return rs.rows;
+    return unwrap(getSupabase().from('Imagen').select('IdImagen, UrlImagen, IdFinca').eq('IdFinca', idFinca)) as Promise<Imagen[]>;
 };
 
 /**
  * Inserta una nueva imagen y retorna el IdImagen generado.
  */
 export const insertar = async (imagen: Imagen): Promise<number> => {
-    const rs = await query<{ IdImagen: number }>(
-        'SELECT public."SP_RegistrarImagen"($1, $2) AS "IdImagen"',
-        [imagen.UrlImagen, imagen.IdFinca]
+    const fila = await unwrapOne(
+        getSupabase().from('Imagen').insert({ UrlImagen: imagen.UrlImagen, IdFinca: imagen.IdFinca }).select('IdImagen').single()
     );
-
-    const idImagen = rs.rows[0]?.IdImagen;
-    if (!idImagen) {
-        throw new Error('No se pudo obtener el identificador de la imagen creada.');
-    }
-    return Number(idImagen);
+    return Number(fila.IdImagen);
 };
 
 /**
  * Actualiza una imagen existente.
  */
 export const actualizar = async (imagen: Imagen): Promise<void> => {
-    await query(
-        'SELECT public."SP_ActualizarImagen"($1, $2, $3)',
-        [imagen.IdImagen, imagen.UrlImagen, imagen.IdFinca]
+    await unwrap(
+        getSupabase().from('Imagen').update({ UrlImagen: imagen.UrlImagen, IdFinca: imagen.IdFinca }).eq('IdImagen', imagen.IdImagen)
     );
 };
 
@@ -50,27 +50,25 @@ export const actualizar = async (imagen: Imagen): Promise<void> => {
  * Elimina una imagen por su ID.
  */
 export const eliminarPorId = async (id: number): Promise<void> => {
-    await query('DELETE FROM public."Imagen" WHERE "IdImagen" = $1', [id]);
+    await unwrap(getSupabase().from('Imagen').delete().eq('IdImagen', id));
 };
 
 /**
  * Busca una imagen por su ID.
  */
 export const buscarPorId = async (id: number): Promise<Imagen | null> => {
-    const rs = await query<Imagen>(
-        `SELECT I."IdImagen", I."UrlImagen", I."IdFinca", F."NombreFinca" 
-         FROM public."Imagen" I 
-         LEFT JOIN public."Finca" F ON I."IdFinca" = F."IdFinca" 
-         WHERE I."IdImagen" = $1`,
-        [id]
+    const fila: any = await unwrap(
+        getSupabase().from('Imagen').select('IdImagen, UrlImagen, IdFinca, Finca(NombreFinca)').eq('IdImagen', id).maybeSingle()
     );
-    return rs.rows[0] || null;
+    if (!fila) return null;
+    const { Finca: f, ...resto } = fila;
+    return { ...resto, NombreFinca: f?.NombreFinca ?? null };
 };
 
 /**
  * Indica si existe la finca.
  */
 export const existeFinca = async (idFinca: number): Promise<boolean> => {
-    const rs = await query('SELECT 1 FROM public."Finca" WHERE "IdFinca" = $1', [idFinca]);
-    return rs.rows.length > 0;
+    const fila = await unwrap(getSupabase().from('Finca').select('IdFinca').eq('IdFinca', idFinca).maybeSingle());
+    return fila !== null;
 };

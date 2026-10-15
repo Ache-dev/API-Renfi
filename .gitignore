@@ -57,6 +57,3 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Datos de Postgres embebido (PGlite)
-.pglite/
-.pglite.tgz*

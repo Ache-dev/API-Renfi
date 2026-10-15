@@ -1,8 +1,11 @@
 import envConfig from './config/env.config';
-import { closeConnection } from './conexion/connection';
+import getSupabase from './conexion/supabase';
 import app from './app';
 
 const PORT = envConfig.PORT;
+
+// Falla al arrancar (y no en la primera petición) si falta la configuración de Supabase
+getSupabase();
 
 // Inicialización del servidor
 const server = app.listen(PORT, () => {
@@ -25,9 +28,8 @@ const server = app.listen(PORT, () => {
 // Cierre controlado de conexiones (Graceful shutdown)
 const gracefulShutdown = async (signal: string) => {
     console.log(`\n[${signal}] Apagando servidor ordenadamente...`);
-    server.close(async () => {
-        await closeConnection();
-        console.log('Conexiones a base de datos cerradas. Proceso finalizado.');
+    server.close(() => {
+        console.log('Proceso finalizado.');
         process.exit(0);
     });
 };

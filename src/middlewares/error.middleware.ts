@@ -25,11 +25,11 @@ export const esErrorDeConexion = (err: any): boolean => {
     const code = String(err.code ?? '');
     if (CONN_CODES.has(code) || code.startsWith('08') || code.startsWith('57P')) return true;
     if (/^[0-9A-Z]{5}$/.test(code)) return false; // SQLSTATE (constraint, sintaxis, etc.)
-    return /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|PGlite|Connection terminated|timeout expired/i.test(String(err.message ?? ''));
+    return /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|fetch failed|Faltan SUPABASE|network|timeout/i.test(String(err.message ?? ''));
 };
 
 /**
- * Traduce errores de Postgres a { status, message } en espanol, sin filtrar SQL.
+ * Traduce errores de Postgres (vía PostgREST) a { status, message } en espanol, sin filtrar SQL.
  */
 const mapPgError = (err: any): { status: number; message: string } | null => {
     const detail = String(err.detail ?? '');
