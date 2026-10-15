@@ -50,7 +50,28 @@ export const buscarPorId = async (req: Request, res: Response, next: NextFunctio
 };
 
 /**
- * Crea una nueva imagen.
+ * Sube una imagen (archivo) a la galería de una finca.
+ */
+export const subirImagenFinca = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const idFinca = Number(req.params.id);
+        const resultado = await imagenService.subirImagenFinca(idFinca, req.file, {
+            TextoAlternativo: req.body?.TextoAlternativo,
+            EsPortada: req.body?.EsPortada
+        });
+        res.status(201).json({
+            message: 'Imagen subida correctamente',
+            id: resultado.id,
+            IdImagen: resultado.IdImagen,
+            imagen: resultado.imagen
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Crea una nueva imagen (por URL externa https).
  */
 export const crearImagen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

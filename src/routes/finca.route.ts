@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import * as fincaController from '../controllers/finca.controller';
 import { validarId } from '../middlewares/validate-id.middleware';
+import * as imagenController from '../controllers/imagen.controller';
 import { soloAdmin } from '../middlewares/auth.middleware';
+import { recibirImagen } from '../middlewares/upload.middleware';
 
 const router = Router();
 
@@ -18,6 +20,9 @@ router.post('/', ...soloAdmin, fincaController.crearFinca);
 router.delete('/delete', ...soloAdmin, validarId, fincaController.eliminarPorId);
 
 router.get('/:id', validarId, fincaController.buscarPorId);
+// Galería: el administrador sube archivos (multipart, campo "imagen"); se alojan en Supabase Storage
+router.post('/:id/imagenes', ...soloAdmin, validarId, recibirImagen, imagenController.subirImagenFinca);
+
 router.put('/:id', ...soloAdmin, validarId, fincaController.actualizarFinca);
 router.delete('/:id', ...soloAdmin, validarId, fincaController.eliminarPorId);
 

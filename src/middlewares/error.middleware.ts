@@ -59,6 +59,16 @@ export const errorHandler = (
     res: Response,
     _next: NextFunction
 ): void => {
+    // Errores de multer (subida de archivos)
+    if (err?.name === 'MulterError') {
+        const tamano = err.code === 'LIMIT_FILE_SIZE';
+        res.status(tamano ? 413 : 400).json({
+            success: false,
+            message: tamano ? 'La imagen supera el tamaño máximo de 5 MB.' : 'Solicitud de subida inválida. Envía un solo archivo en el campo "imagen".'
+        });
+        return;
+    }
+
     const pg = mapPgError(err);
     let statusCode = pg?.status ?? (err.statusCode || (err.status ? Number(err.status) : 500));
     let message = pg?.message ?? err.message ?? 'Error interno del servidor';
