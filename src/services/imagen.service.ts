@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 import * as imagenDao from '../dao/imagen.dao';
 import * as storage from '../conexion/storage';
-import { Imagen, CrearImagenDto, ActualizarImagenDto } from '../models/imagen';
+import { Imagen, ActualizarImagenDto } from '../models/imagen';
 import { AppError } from '../middlewares/error.middleware';
 
 export const MAX_IMAGENES_POR_FINCA = 10;
@@ -10,11 +10,6 @@ export const MAX_BYTES = 5 * 1024 * 1024;
 const LADO_MAXIMO = 1600;
 const FORMATOS_ACEPTADOS = ['jpeg', 'png', 'webp'];
 
-// El front puede enviar Url/url/ImagenUrl/imagenUrl en lugar de UrlImagen.
-const aliasUrl = <T extends { UrlImagen?: any }>(dto: T): T => {
-    const d: any = dto ?? {};
-    return { ...d, UrlImagen: d.UrlImagen ?? d.Url ?? d.url ?? d.ImagenUrl ?? d.imagenUrl };
-};
 const verificarFinca = async (idFinca: number): Promise<void> => {
     if (!(await imagenDao.existeFinca(idFinca))) {
         throw new AppError(`Finca con ID ${idFinca} no encontrada`, 404);
@@ -30,15 +25,6 @@ const textoAlternativo = (v: unknown): string | null | undefined => {
     const t = String(v).trim();
     if (t.length > 200) throw new AppError('El texto alternativo no puede superar 200 caracteres', 400);
     return t;
-};
-
-// Solo URLs https: la app las muestra tal cual y no debe aceptar otros esquemas (javascript:, file:, ...)
-const validarUrlExterna = (valor: unknown): string => {
-    const url = typeof valor === 'string' ? valor.trim() : '';
-    if (!url || url.length > 500 || !/^https:\/\/[^\s]+$/i.test(url)) {
-        throw new AppError('UrlImagen debe ser una URL https válida de hasta 500 caracteres', 400);
-    }
-    return url;
 };
 
 /**
@@ -129,37 +115,7 @@ export const subirImagenFinca = async (
 };
 
 /**
- * Registra una imagen por URL externa (https) para una finca.
- */
-export const crearImagen = async (dto: CrearImagenDto): Promise<{
-    id: number;
-    IdImagen: number;
-    imagen: Imagen | null;
-}> => {
-    dto = aliasUrl(dto);
-    if (!Number.isInteger(Number(dto.IdFinca)) || Number(dto.IdFinca) <= 0) {
-        throw new AppError('Los campos UrlImagen e IdFinca son obligatorios', 400);
-    }
-    const idFinca = Number(dto.IdFinca);
-    const url = validarUrlExterna(dto.UrlImagen);
-    await verificarFinca(idFinca);
-
-    const existentes = await imagenDao.contarPorFinca(idFinca);
-    if (existentes >= MAX_IMAGENES_POR_FINCA) {
-        throw new AppError(`Cada finca admite máximo ${MAX_IMAGENES_POR_FINCA} imágenes.`, 409);
-    }
-
-    const id = await imagenDao.insertar({
-        IdFinca: idFinca,
-        UrlImagen: url,
-        EsPortada: existentes === 0 || aBooleano(dto.EsPortada) === true,
-        TextoAlternativo: textoAlternativo(dto.TextoAlternativo) ?? null
-    });
-    return { id, IdImagen: id, imagen: await imagenDao.buscarPorId(id) };
-};
-
-/**
- * Actualiza una imagen: texto alternativo, orden, portada, finca o (solo si es externa) la URL.
+ * Actualiza una imagen: texto alternativo, orden, portada o finca.
  */
 export const actualizarImagen = async (id: number, dto: ActualizarImagenDto): Promise<Imagen | null> => {
     const existente = await imagenDao.buscarPorId(id);
@@ -167,7 +123,6 @@ export const actualizarImagen = async (id: number, dto: ActualizarImagenDto): Pr
         throw new AppError(`Imagen con ID ${id} no encontrada`, 404);
     }
 
-    dto = aliasUrl(dto);
     const campos: Record<string, unknown> = {};
     let idFinca = existente.IdFinca;
 
@@ -177,10 +132,6 @@ export const actualizarImagen = async (id: number, dto: ActualizarImagenDto): Pr
         idFinca = Number(dto.IdFinca);
         campos.IdFinca = idFinca;
         campos.EsPortada = false; // al cambiar de finca deja de ser portada de la anterior
-    }
-    if (dto.UrlImagen !== undefined) {
-        if (existente.RutaStorage) throw new AppError('Una imagen alojada en Storage no cambia de URL: sube otra imagen.', 400);
-        campos.UrlImagen = validarUrlExterna(dto.UrlImagen);
     }
     const alt = textoAlternativo(dto.TextoAlternativo);
     if (alt !== undefined) campos.TextoAlternativo = alt;

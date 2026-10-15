@@ -1,14 +1,14 @@
 /**
- * Imagen de una finca. Puede estar alojada en Supabase Storage (RutaStorage)
- * o ser una URL externa heredada (UrlImagen). UrlImagen siempre llega a los
- * clientes con la URL final lista para mostrar.
+ * Imagen de una finca, alojada en Supabase Storage (RutaStorage).
+ * UrlImagen no es una columna: la API la calcula con la URL pública del archivo
+ * para que los clientes la muestren directamente.
  */
 export interface Imagen {
     IdImagen?: number | undefined;
     UrlImagen: string;
     IdFinca: number;
     NombreFinca?: string | undefined;
-    RutaStorage?: string | null | undefined;
+    RutaStorage?: string | undefined;
     Orden?: number | undefined;
     EsPortada?: boolean | undefined;
     TextoAlternativo?: string | null | undefined;
@@ -24,8 +24,7 @@ export interface Imagen {
  */
 export interface NuevaImagen {
     IdFinca: number;
-    UrlImagen?: string | null;
-    RutaStorage?: string | null;
+    RutaStorage: string;
     EsPortada: boolean;
     TextoAlternativo?: string | null;
     TipoMime?: string | null;
@@ -34,16 +33,8 @@ export interface NuevaImagen {
     Alto?: number | null;
 }
 
-export interface CrearImagenDto {
-    UrlImagen: string;
-    IdFinca: number;
-    TextoAlternativo?: string | undefined;
-    EsPortada?: boolean | string | undefined;
-}
-
 export interface ActualizarImagenDto {
     IdImagen?: number | undefined;
-    UrlImagen?: string | undefined;
     IdFinca?: number | undefined;
     TextoAlternativo?: string | null | undefined;
     Orden?: number | string | undefined;

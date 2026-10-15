@@ -19,6 +19,7 @@ let siguienteId = 1;
 let subidos: { ruta: string; buffer: Buffer }[] = [];
 let borrados: string[] = [];
 let fallarInsercion = false;
+let imagenDaoUltimoUpdate: Record<string, unknown> | null = null;
 
 const token = (id: number) =>
     jwt.sign({ NumeroDocumento: id, IdRol: usuarios[id].IdRol, pv: huellaContrasena(usuarios[id].Contrasena) }, envConfig.JWT.SECRET, { expiresIn: '5m' });
@@ -31,7 +32,7 @@ before(async () => {
         if (fallarInsercion) throw new Error('fallo de base de datos');
         if (n.EsPortada) imagenes.forEach((i) => i.IdFinca === n.IdFinca && (i.EsPortada = false));
         const id = siguienteId++;
-        imagenes.push({ IdImagen: id, Orden: id, ...n, UrlImagen: n.UrlImagen ?? (n.RutaStorage ? `https://cdn.test/${n.RutaStorage}` : null) });
+        imagenes.push({ IdImagen: id, Orden: id, ...n, UrlImagen: `https://cdn.test/${n.RutaStorage}` });
         return id;
     });
     mock.method(imagenDao, 'buscarPorId', async (id: number) => imagenes.find((i) => i.IdImagen === id) ?? null);
@@ -40,6 +41,7 @@ before(async () => {
         imagenes.filter((i) => i.IdFinca === idFinca && i.IdImagen !== excluir).sort((a, b) => a.Orden - b.Orden)[0] ?? null);
     mock.method(imagenDao, 'actualizar', async (id: number, idFinca: number, campos: any) => {
         if (campos.EsPortada === true) imagenes.forEach((i) => i.IdFinca === idFinca && (i.EsPortada = false));
+        imagenDaoUltimoUpdate = campos;
         Object.assign(imagenes.find((i) => i.IdImagen === id), campos);
     });
     mock.method(storage, 'subirImagen', async (ruta: string, buffer: Buffer) => { subidos.push({ ruta, buffer }); });
@@ -200,15 +202,19 @@ test('se puede cambiar portada, orden y texto; no se puede dejar sin portada', a
     assert.strictEqual((await api('PUT', `/imagen/${b.body.IdImagen}`, { Orden: -5 })).status, 400);
 });
 
-test('una imagen de Storage no admite cambiar su URL', async () => {
+test('la URL ya no es un dato editable: se ignora y la imagen no cambia', async () => {
     const a = await subir(1, await png(), { tk: admin() });
-    assert.strictEqual((await api('PUT', `/imagen/${a.body.IdImagen}`, { UrlImagen: 'https://otra.com/x.jpg' })).status, 400);
+    const antes = imagenes.find((i) => i.IdImagen === a.body.IdImagen).RutaStorage;
+    const r = await api('PUT', `/imagen/${a.body.IdImagen}`, { UrlImagen: 'https://otra.com/x.jpg', TextoAlternativo: 'Fachada' });
+    assert.strictEqual(r.status, 200);
+    const despues = imagenes.find((i) => i.IdImagen === a.body.IdImagen);
+    assert.strictEqual(despues.RutaStorage, antes);
+    assert.strictEqual(despues.TextoAlternativo, 'Fachada');
+    assert.ok(!('UrlImagen' in (imagenDaoUltimoUpdate ?? {})));
 });
 
-test('por URL externa solo se aceptan enlaces https', async () => {
-    assert.strictEqual((await api('POST', '/imagen', { IdFinca: 1, UrlImagen: 'javascript:alert(1)' })).status, 400);
-    assert.strictEqual((await api('POST', '/imagen', { IdFinca: 1, UrlImagen: 'http://inseguro.com/a.jpg' })).status, 400);
-    const ok = await api('POST', '/imagen', { IdFinca: 1, UrlImagen: 'https://images.unsplash.com/foto.jpg' });
-    assert.strictEqual(ok.status, 201);
-    assert.strictEqual(ok.body.imagen.EsPortada, true);
+test('ya no se pueden registrar imágenes por URL: solo subiendo el archivo', async () => {
+    const r = await api('POST', '/imagen', { IdFinca: 1, UrlImagen: 'https://images.unsplash.com/foto.jpg' });
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(imagenes.length, 0);
 });

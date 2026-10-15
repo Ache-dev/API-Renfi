@@ -2,9 +2,9 @@ import getSupabase, { unwrap, unwrapOne } from "../conexion/supabase";
 import { urlDeImagen } from "../conexion/storage";
 import { Imagen, NuevaImagen } from "../models/imagen";
 
-const COLUMNAS = 'IdImagen, UrlImagen, RutaStorage, IdFinca, Orden, EsPortada, TextoAlternativo, TipoMime, TamanoBytes, Ancho, Alto, FechaCreacion';
+const COLUMNAS = 'IdImagen, RutaStorage, IdFinca, Orden, EsPortada, TextoAlternativo, TipoMime, TamanoBytes, Ancho, Alto, FechaCreacion';
 
-// Entrega siempre la URL final lista para mostrar, sea del bucket o externa.
+// Entrega siempre la URL final lista para mostrar (se calcula desde la ruta del bucket).
 const conUrl = (fila: any): Imagen => ({ ...fila, UrlImagen: urlDeImagen(fila) });
 
 const porGaleria = (a: Imagen, b: Imagen) =>
@@ -67,8 +67,7 @@ export const insertar = async (imagen: NuevaImagen): Promise<number> => {
     const fila = await unwrapOne(
         getSupabase().from('Imagen').insert({
             IdFinca: imagen.IdFinca,
-            UrlImagen: imagen.UrlImagen ?? null,
-            RutaStorage: imagen.RutaStorage ?? null,
+            RutaStorage: imagen.RutaStorage,
             Orden: orden,
             EsPortada: imagen.EsPortada,
             TextoAlternativo: imagen.TextoAlternativo ?? null,
@@ -117,30 +116,6 @@ export const primeraDeFinca = async (idFinca: number, excluirId: number): Promis
         getSupabase().from('Imagen').select(COLUMNAS).eq('IdFinca', idFinca).neq('IdImagen', excluirId).order('Orden').order('IdImagen').limit(1)
     );
     return filas[0] ? conUrl(filas[0]) : null;
-};
-
-/**
- * Imágenes que solo tienen URL externa (aún no están en Storage), en orden de Id.
- */
-export const pendientesDeMigrar = async (): Promise<Imagen[]> => {
-    const filas: any[] = await unwrap(
-        getSupabase().from('Imagen').select(COLUMNAS).is('RutaStorage', null).not('UrlImagen', 'is', null).order('IdImagen')
-    );
-    return filas;
-};
-
-/**
- * Registra que una imagen ya está en Storage. Solo actúa si todavía no tenía RutaStorage,
- * así dos ejecuciones simultáneas del script no se pisan.
- */
-export const marcarMigrada = async (
-    id: number,
-    datos: { RutaStorage: string; TipoMime: string; TamanoBytes: number; Ancho: number; Alto: number }
-): Promise<void> => {
-    const filas: any[] = await unwrap(
-        getSupabase().from('Imagen').update(datos).eq('IdImagen', id).is('RutaStorage', null).select('IdImagen')
-    );
-    if (!filas.length) throw new Error(`La imagen ${id} ya fue migrada o no existe`);
 };
 
 /**

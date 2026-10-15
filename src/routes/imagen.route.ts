@@ -5,11 +5,10 @@ import { soloAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// Lectura pública; escritura solo administrador
+// Lectura pública; editar y borrar solo administrador. Las imágenes se suben por POST /api/finca/:id/imagenes
 router.get('/finca/:id', validarId, imagenController.getImagenesPorIdFinca);
 
 router.get('/', imagenController.getImagenes);
-router.post('/', ...soloAdmin, imagenController.crearImagen);
 
 router.delete('/delete', ...soloAdmin, validarId, imagenController.eliminarPorId);
 

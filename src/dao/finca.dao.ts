@@ -15,7 +15,7 @@ export type {
     FincaIngresosTop
 };
 
-const SELECT_FINCA = 'IdFinca, IdMunicipio, NumeroDocumentoUsuario, NombreFinca, Direccion, InformacionAdicional, Capacidad, Precio, Estado, Calificacion, Habitaciones, Banos, Camas, NochesMinimas, Comodidades, Reglas, HoraEntrada, HoraSalida, PermiteMascotas, PermiteEventos, Latitud, Longitud, Municipio(NombreMunicipio), Usuario(NumeroDocumento, NombreUsuario, ApellidoUsuario, Telefono, Correo), Imagen(IdImagen, UrlImagen, RutaStorage, IdFinca, Orden, EsPortada, TextoAlternativo, Ancho, Alto)';
+const SELECT_FINCA = 'IdFinca, IdMunicipio, NumeroDocumentoUsuario, NombreFinca, Direccion, InformacionAdicional, Capacidad, Precio, Estado, Calificacion, Habitaciones, Banos, Camas, NochesMinimas, Comodidades, Reglas, HoraEntrada, HoraSalida, PermiteMascotas, PermiteEventos, Latitud, Longitud, Municipio(NombreMunicipio), Usuario(NumeroDocumento, NombreUsuario, ApellidoUsuario, Telefono, Correo), Imagen(IdImagen, RutaStorage, IdFinca, Orden, EsPortada, TextoAlternativo, Ancho, Alto)';
 
 // Columnas de la ficha completa (la base les da un valor por defecto si no se envían)
 const CAMPOS_FICHA = ['Habitaciones', 'Banos', 'Camas', 'NochesMinimas', 'Comodidades', 'Reglas', 'HoraEntrada', 'HoraSalida', 'PermiteMascotas', 'PermiteEventos', 'Latitud', 'Longitud'] as const;
@@ -28,7 +28,7 @@ const hhmm = (hora?: string | null) => (hora ? String(hora).slice(0, 5) : null);
 const aplanar = ({ Municipio: m, Usuario: u, Imagen: imagenes, ...f }: any): Finca => {
     // Galería ordenada: portada primero y luego por orden, con la URL final de cada imagen
     const galeria = (imagenes ?? [])
-        .map(({ RutaStorage, ...i }: any) => ({ ...i, UrlImagen: urlDeImagen({ RutaStorage, UrlImagen: i.UrlImagen }) }))
+        .map(({ RutaStorage, ...i }: any) => ({ ...i, UrlImagen: urlDeImagen({ RutaStorage }) }))
         .sort((a: any, b: any) => Number(b.EsPortada) - Number(a.EsPortada) || a.Orden - b.Orden || a.IdImagen - b.IdImagen);
     return {
         ...f,

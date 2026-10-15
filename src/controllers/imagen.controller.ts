@@ -71,23 +71,6 @@ export const subirImagenFinca = async (req: Request, res: Response, next: NextFu
 };
 
 /**
- * Crea una nueva imagen (por URL externa https).
- */
-export const crearImagen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-        const resultado = await imagenService.crearImagen(req.body);
-        res.status(201).json({
-            message: 'Imagen creada correctamente',
-            id: resultado.id,
-            IdImagen: resultado.IdImagen,
-            imagen: resultado.imagen
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-/**
  * Actualiza una imagen existente.
  */
 export const actualizarImagen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

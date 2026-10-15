@@ -39,7 +39,6 @@ export const borrarImagenes = async (rutas: string[]): Promise<void> => {
 export const urlPublica = (ruta: string): string => bucket().getPublicUrl(ruta).data.publicUrl;
 
 /**
- * URL final de una imagen: la del bucket si está en Storage, o la externa heredada.
+ * URL final de una imagen a partir de su ruta en el bucket.
  */
-export const urlDeImagen = (fila: { RutaStorage?: string | null; UrlImagen?: string | null }): string | null =>
-    fila.RutaStorage ? urlPublica(fila.RutaStorage) : (fila.UrlImagen ?? null);
+export const urlDeImagen = (fila: { RutaStorage: string }): string => urlPublica(fila.RutaStorage);
