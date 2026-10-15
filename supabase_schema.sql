@@ -1,4 +1,9 @@
 -- =============================================================================
+-- ⚠️  SCRIPT DESTRUCTIVO: SOLO PARA CREAR UNA BASE NUEVA O VACÍA.
+-- Borra y recrea TODAS las tablas (y por tanto todos sus datos). Para una base
+-- que ya tiene datos NO lo ejecutes: usa los scripts de db/migraciones/.
+-- =============================================================================
+-- =============================================================================
 -- BASE DE DATOS RENFI - POSTGRESQL / SUPABASE
 -- Compatible al 100% con Supabase (SQL Editor / Migraciones) y PostgreSQL 12+
 -- Proyecto: Renfi (FrontEnd & Backend API)
@@ -22,6 +27,20 @@ DROP TABLE IF EXISTS public."Finca" CASCADE;
 DROP TABLE IF EXISTS public."Municipio" CASCADE;
 DROP TABLE IF EXISTS public."Usuario" CASCADE;
 DROP TABLE IF EXISTS public."Rol" CASCADE;
+
+-- Funciones SP_* previas: CREATE OR REPLACE falla (42P13) si la firma o los valores por
+-- defecto de una versión anterior difieren, así que se eliminan todas antes de recrearlas.
+DO $$
+DECLARE f record;
+BEGIN
+    FOR f IN
+        SELECT p.oid::regprocedure AS firma
+        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname LIKE 'SP\_%'
+    LOOP
+        EXECUTE 'DROP FUNCTION ' || f.firma || ' CASCADE';
+    END LOOP;
+END $$;
 
 -- =============================================================================
 -- 3. CREACIÓN DE TABLAS CON IDENTIFICADORES EXACTOS (PASCALCASE)
