@@ -1,18 +1,19 @@
 import { Router } from 'express';
 import * as facturaController from '../controllers/factura.controller';
+import * as facturaDao from '../dao/factura.dao';
 import { validarId } from '../middlewares/validate-id.middleware';
+import { soloAdmin, duenoOAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-router.get('/', facturaController.getFacturas);
-router.post('/', facturaController.crearFactura);
+// Las facturas las crea la API junto con la reserva; el listado completo y la edición son del administrador
+router.get('/', ...soloAdmin, facturaController.getFacturas);
+router.post('/', ...soloAdmin, facturaController.crearFactura);
 
-// Compatibilidad con DELETE por query param: /api/factura/delete?id=3
-router.delete('/delete', validarId, facturaController.eliminarPorId);
+router.delete('/delete', ...soloAdmin, validarId, facturaController.eliminarPorId);
 
-router.get('/:id', validarId, facturaController.buscarPorId);
-router.put('/:id', validarId, facturaController.actualizarFactura);
-router.delete('/:id', validarId, facturaController.eliminarPorId);
+router.get('/:id', validarId, ...duenoOAdmin(async (id) => (await facturaDao.buscarPorId(id))?.NumeroDocumentoCliente ?? null), facturaController.buscarPorId);
+router.put('/:id', ...soloAdmin, validarId, facturaController.actualizarFactura);
+router.delete('/:id', ...soloAdmin, validarId, facturaController.eliminarPorId);
 
 export default router;
-

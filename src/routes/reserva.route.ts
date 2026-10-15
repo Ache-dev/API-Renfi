@@ -1,22 +1,26 @@
 import { Router } from 'express';
 import * as reservaController from '../controllers/reserva.controller';
+import * as reservaDao from '../dao/reserva.dao';
 import { validarId } from '../middlewares/validate-id.middleware';
+import { autenticarJwt, soloAdmin, propioOAdmin, duenoOAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// Consultas
-router.get('/', reservaController.listar);
-router.get('/usuario/:numeroDocumento', reservaController.listarPorUsuario);
+const duenoDeReserva = async (id: number) => (await reservaDao.buscarPorId(id))?.NumeroDocumentoUsuario ?? null;
 
-// Inserción
-router.post('/', reservaController.crear);
+router.get('/', ...soloAdmin, reservaController.listar);
+router.get('/usuario/:numeroDocumento', ...propioOAdmin('numeroDocumento'), reservaController.listarPorUsuario);
+// Fechas ocupadas para el calendario: público y sin datos personales
+router.get('/finca/:id/ocupadas', validarId, reservaController.ocupadasPorFinca);
 
-// Compatibilidad con DELETE por query param: /api/reserva/delete?id=3
-router.delete('/delete', validarId, reservaController.eliminar);
+// Un cliente reserva a su nombre (el controlador fuerza el documento del token)
+router.post('/', autenticarJwt, reservaController.crear);
 
-// Operaciones por ID
-router.get('/:id', validarId, reservaController.buscarPorId);
-router.put('/:id', validarId, reservaController.actualizar);
-router.delete('/:id', validarId, reservaController.eliminar);
+router.delete('/delete', ...soloAdmin, validarId, reservaController.eliminar);
+
+router.get('/:id', validarId, ...duenoOAdmin(duenoDeReserva), reservaController.buscarPorId);
+// Un cliente solo puede cancelar su propia reserva (lo verifica el controlador)
+router.put('/:id', validarId, ...duenoOAdmin(duenoDeReserva), reservaController.actualizar);
+router.delete('/:id', ...soloAdmin, validarId, reservaController.eliminar);
 
 export default router;

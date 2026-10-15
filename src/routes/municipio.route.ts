@@ -1,21 +1,20 @@
 import { Router } from 'express';
 import * as municipioController from '../controllers/municipio.controller';
 import { validarId } from '../middlewares/validate-id.middleware';
+import { soloAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// Endpoint de reporte (debe ir antes de /:id)
-router.get('/report/mas-reservas', municipioController.getMunicipiosConMasReservas);
+router.get('/report/mas-reservas', ...soloAdmin, municipioController.getMunicipiosConMasReservas);
 
-// CRUD
+// Lectura pública; escritura solo administrador
 router.get('/', municipioController.getMunicipios);
-router.post('/', municipioController.crearMunicipio);
+router.post('/', ...soloAdmin, municipioController.crearMunicipio);
 
-// Compatibilidad con DELETE por query param: /api/municipio/delete?id=3
-router.delete('/delete', validarId, municipioController.eliminarPorId);
+router.delete('/delete', ...soloAdmin, validarId, municipioController.eliminarPorId);
 
 router.get('/:id', validarId, municipioController.buscarPorId);
-router.put('/:id', validarId, municipioController.actualizarMunicipio);
-router.delete('/:id', validarId, municipioController.eliminarPorId);
+router.put('/:id', ...soloAdmin, validarId, municipioController.actualizarMunicipio);
+router.delete('/:id', ...soloAdmin, validarId, municipioController.eliminarPorId);
 
 export default router;

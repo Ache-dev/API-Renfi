@@ -1,3 +1,4 @@
+import { esAdmin } from '../middlewares/auth.middleware';
 import { Request, Response, NextFunction } from 'express';
 import * as pagoService from '../services/pago.service';
 import { AppError } from '../middlewares/error.middleware';
@@ -37,7 +38,7 @@ export const buscarPorId = async (req: Request, res: Response, next: NextFunctio
  */
 export const crearPago = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const resultado = await pagoService.crearPago(req.body);
+        const resultado = await pagoService.crearPago(req.body, { esAdmin: esAdmin(req.user), documento: req.user?.NumeroDocumento });
         res.status(201).json({
             message: 'Pago creado correctamente',
             id: resultado.id,

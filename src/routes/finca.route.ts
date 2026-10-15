@@ -1,24 +1,24 @@
 import { Router } from 'express';
 import * as fincaController from '../controllers/finca.controller';
 import { validarId } from '../middlewares/validate-id.middleware';
+import { soloAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// Endpoints de reportes y estadísticas (deben declararse antes de /:id)
-router.get('/report/mas-reservadas', fincaController.getFincasMasReservadas);
-router.get('/report/promedio-calificacion', fincaController.getPromedioCalificacionFincas);
-router.get('/report/total-ingresos', fincaController.getTotalIngresosPorFinca);
-router.get('/report/mas-ingresos', fincaController.getFincasConMasIngresos);
+// Reportes (administrador)
+router.get('/report/mas-reservadas', ...soloAdmin, fincaController.getFincasMasReservadas);
+router.get('/report/promedio-calificacion', ...soloAdmin, fincaController.getPromedioCalificacionFincas);
+router.get('/report/total-ingresos', ...soloAdmin, fincaController.getTotalIngresosPorFinca);
+router.get('/report/mas-ingresos', ...soloAdmin, fincaController.getFincasConMasIngresos);
 
-// CRUD de Fincas
+// Catálogo público; escritura solo administrador
 router.get('/', fincaController.getFincas);
-router.post('/', fincaController.crearFinca);
+router.post('/', ...soloAdmin, fincaController.crearFinca);
 
-// Compatibilidad con DELETE por query param: /api/finca/delete?id=3
-router.delete('/delete', validarId, fincaController.eliminarPorId);
+router.delete('/delete', ...soloAdmin, validarId, fincaController.eliminarPorId);
 
 router.get('/:id', validarId, fincaController.buscarPorId);
-router.put('/:id', validarId, fincaController.actualizarFinca);
-router.delete('/:id', validarId, fincaController.eliminarPorId);
+router.put('/:id', ...soloAdmin, validarId, fincaController.actualizarFinca);
+router.delete('/:id', ...soloAdmin, validarId, fincaController.eliminarPorId);
 
 export default router;

@@ -1,17 +1,18 @@
 import { Router } from 'express';
 import * as metodoController from '../controllers/metododepago.controller';
 import { validarId } from '../middlewares/validate-id.middleware';
+import { autenticarJwt, soloAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-router.get('/', metodoController.getMetodos);
-router.post('/', metodoController.crearMetodo);
+// Lectura con sesión iniciada; escritura solo administrador
+router.get('/', autenticarJwt, metodoController.getMetodos);
+router.post('/', ...soloAdmin, metodoController.crearMetodo);
 
-// Compatibilidad con DELETE por query param: /api/metododepago/delete?id=3
-router.delete('/delete', validarId, metodoController.eliminarPorId);
+router.delete('/delete', ...soloAdmin, validarId, metodoController.eliminarPorId);
 
-router.get('/:id', validarId, metodoController.buscarPorId);
-router.put('/:id', validarId, metodoController.actualizarMetodo);
-router.delete('/:id', validarId, metodoController.eliminarPorId);
+router.get('/:id', autenticarJwt, validarId, metodoController.buscarPorId);
+router.put('/:id', ...soloAdmin, validarId, metodoController.actualizarMetodo);
+router.delete('/:id', ...soloAdmin, validarId, metodoController.eliminarPorId);
 
 export default router;

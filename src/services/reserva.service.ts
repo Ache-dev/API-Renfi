@@ -35,7 +35,7 @@ export const listarPorUsuario = async (numeroDocumento: number): Promise<Reserva
  * Crea una reserva validando fechas y campos obligatorios.
  * Genera automáticamente la factura asociada si se requiere para flujo completo.
  */
-export const crearReserva = async (dto: CrearReservaDto): Promise<{
+export const crearReserva = async (dto: CrearReservaDto, opciones: { esAdmin?: boolean } = {}): Promise<{
     id: number;
     IdReserva: number;
     idReserva: number;
@@ -76,14 +76,23 @@ export const crearReserva = async (dto: CrearReservaDto): Promise<{
         throw new AppError('La finca ya tiene una reserva en las fechas seleccionadas', 409);
     }
 
+    // Un cliente no decide cuánto paga: el monto es noches x precio de la finca.
+    let monto = Number(dto.MontoReserva);
+    if (!opciones.esAdmin) {
+        const precio = await reservaDao.precioFinca(Number(dto.IdFinca));
+        if (precio === null) throw new AppError('La finca indicada no existe', 404);
+        const noches = Math.max(1, Math.round((fechaSalida.getTime() - fechaEntrada.getTime()) / 86_400_000));
+        monto = precio * noches;
+    }
+
     const reservaParaInsertar: Reserva = {
         IdFinca: Number(dto.IdFinca),
         NumeroDocumentoUsuario: dto.NumeroDocumentoUsuario ? Number(dto.NumeroDocumentoUsuario) : undefined,
         FechaReserva: normalizeDate(dto.FechaReserva) || new Date(),
         FechaEntrada: fechaEntrada,
         FechaSalida: fechaSalida,
-        MontoReserva: Number(dto.MontoReserva),
-        Estado: dto.Estado || 'Activa'
+        MontoReserva: monto,
+        Estado: opciones.esAdmin ? (dto.Estado || 'Activa') : 'Activa'
     };
 
     const idReserva = await reservaDao.insertar(reservaParaInsertar);
@@ -95,7 +104,7 @@ export const crearReserva = async (dto: CrearReservaDto): Promise<{
             IdFactura: 0,
             IdReserva: idReserva,
             FechaFactura: new Date(),
-            Total: Number(dto.MontoReserva)
+            Total: monto
         };
         idFactura = await facturaDao.insertar(factura);
     } catch (e) {
@@ -113,6 +122,11 @@ export const crearReserva = async (dto: CrearReservaDto): Promise<{
         reserva: reservaCompleta
     };
 };
+
+/**
+ * Fechas ocupadas de una finca (para el calendario de reserva), sin datos personales.
+ */
+export const ocupadasPorFinca = async (idFinca: number) => reservaDao.ocupadasPorFinca(idFinca);
 
 /**
  * Actualiza una reserva existente.

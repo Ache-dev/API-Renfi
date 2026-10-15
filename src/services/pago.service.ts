@@ -1,4 +1,5 @@
 import * as pagoDao from '../dao/pago.dao';
+import * as facturaDao from '../dao/factura.dao';
 import { Pago, CrearPagoDto, ActualizarPagoDto, PagoPendiente } from '../models/pago';
 import { AppError } from '../middlewares/error.middleware';
 
@@ -19,7 +20,7 @@ export const buscarPorId = async (id: number): Promise<Pago | null> => {
 /**
  * Registra un nuevo pago y retorna el ID creado.
  */
-export const crearPago = async (dto: CrearPagoDto): Promise<{
+export const crearPago = async (dto: CrearPagoDto, quien: { esAdmin: boolean; documento?: number | undefined } = { esAdmin: false }): Promise<{
     id: number;
     IdPago: number;
     idPago: number;
@@ -29,12 +30,27 @@ export const crearPago = async (dto: CrearPagoDto): Promise<{
         throw new AppError('Los campos IdFactura, IdMetodoDePago y Monto son obligatorios', 400);
     }
 
+    let monto = Number(dto.Monto);
+    let estado = dto.EstadoPago || 'Pagado';
+    let fechaPago = dto.FechaPago ? new Date(dto.FechaPago) : new Date();
+    if (!quien.esAdmin) {
+        // Un cliente solo paga sus propias facturas, por el total facturado y con la fecha del servidor.
+        const factura = await facturaDao.buscarPorId(Number(dto.IdFactura));
+        if (!factura) throw new AppError('Factura no encontrada', 404);
+        if (Number(factura.NumeroDocumentoCliente) !== Number(quien.documento)) {
+            throw new AppError('No tienes permisos para pagar esta factura.', 403);
+        }
+        monto = Number(factura.Total);
+        fechaPago = new Date();
+        if (!['Pagado', 'Pendiente'].includes(estado)) estado = 'Pagado';
+    }
+
     const pago: Pago = {
         IdFactura: Number(dto.IdFactura),
         IdMetodoDePago: Number(dto.IdMetodoDePago),
-        Monto: Number(dto.Monto),
-        FechaPago: dto.FechaPago ? new Date(dto.FechaPago) : new Date(),
-        EstadoPago: dto.EstadoPago || 'Pagado'
+        Monto: monto,
+        FechaPago: fechaPago,
+        EstadoPago: estado
     };
 
     const idPago = await pagoDao.insertar(pago);
