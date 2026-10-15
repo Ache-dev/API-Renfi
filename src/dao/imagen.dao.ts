@@ -120,6 +120,30 @@ export const primeraDeFinca = async (idFinca: number, excluirId: number): Promis
 };
 
 /**
+ * Imágenes que solo tienen URL externa (aún no están en Storage), en orden de Id.
+ */
+export const pendientesDeMigrar = async (): Promise<Imagen[]> => {
+    const filas: any[] = await unwrap(
+        getSupabase().from('Imagen').select(COLUMNAS).is('RutaStorage', null).not('UrlImagen', 'is', null).order('IdImagen')
+    );
+    return filas;
+};
+
+/**
+ * Registra que una imagen ya está en Storage. Solo actúa si todavía no tenía RutaStorage,
+ * así dos ejecuciones simultáneas del script no se pisan.
+ */
+export const marcarMigrada = async (
+    id: number,
+    datos: { RutaStorage: string; TipoMime: string; TamanoBytes: number; Ancho: number; Alto: number }
+): Promise<void> => {
+    const filas: any[] = await unwrap(
+        getSupabase().from('Imagen').update(datos).eq('IdImagen', id).is('RutaStorage', null).select('IdImagen')
+    );
+    if (!filas.length) throw new Error(`La imagen ${id} ya fue migrada o no existe`);
+};
+
+/**
  * Indica si existe la finca.
  */
 export const existeFinca = async (idFinca: number): Promise<boolean> => {
