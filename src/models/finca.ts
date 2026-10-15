@@ -19,7 +19,21 @@ export interface Finca {
     TelefonoPropietario?: string | undefined;
     CorreoPropietario?: string | undefined;
     Dueno?: string | undefined;
-    Imagenes?: { IdImagen: number; UrlImagen: string; IdFinca: number }[] | undefined;
+    // Ficha completa
+    Habitaciones?: number | undefined;
+    Banos?: number | undefined;
+    Camas?: number | undefined;
+    NochesMinimas?: number | undefined;
+    Comodidades?: string[] | undefined;
+    Reglas?: string | null | undefined;
+    HoraEntrada?: string | null | undefined; // HH:MM
+    HoraSalida?: string | null | undefined; // HH:MM
+    PermiteMascotas?: boolean | undefined;
+    PermiteEventos?: boolean | undefined;
+    Latitud?: number | null | undefined;
+    Longitud?: number | null | undefined;
+    UrlPortada?: string | null | undefined;
+    Imagenes?: { IdImagen: number; UrlImagen: string; IdFinca: number; Orden?: number; EsPortada?: boolean; TextoAlternativo?: string | null; Ancho?: number | null; Alto?: number | null }[] | undefined;
 }
 
 /**
@@ -35,6 +49,19 @@ export interface CrearFincaDto {
     Precio: number;
     Estado?: string | undefined;
     Calificacion?: number | undefined;
+    // Ficha completa: Comodidades acepta lista o texto separado por comas
+    Habitaciones?: number | string | undefined;
+    Banos?: number | string | undefined;
+    Camas?: number | string | undefined;
+    NochesMinimas?: number | string | undefined;
+    Comodidades?: string[] | string | undefined;
+    Reglas?: string | null | undefined;
+    HoraEntrada?: string | null | undefined;
+    HoraSalida?: string | null | undefined;
+    PermiteMascotas?: boolean | string | undefined;
+    PermiteEventos?: boolean | string | undefined;
+    Latitud?: number | string | null | undefined;
+    Longitud?: number | string | null | undefined;
 }
 
 /**
@@ -51,6 +78,19 @@ export interface ActualizarFincaDto {
     Precio?: number | undefined;
     Estado?: string | undefined;
     Calificacion?: number | undefined;
+    // Ficha completa: Comodidades acepta lista o texto separado por comas
+    Habitaciones?: number | string | undefined;
+    Banos?: number | string | undefined;
+    Camas?: number | string | undefined;
+    NochesMinimas?: number | string | undefined;
+    Comodidades?: string[] | string | undefined;
+    Reglas?: string | null | undefined;
+    HoraEntrada?: string | null | undefined;
+    HoraSalida?: string | null | undefined;
+    PermiteMascotas?: boolean | string | undefined;
+    PermiteEventos?: boolean | string | undefined;
+    Latitud?: number | string | null | undefined;
+    Longitud?: number | string | null | undefined;
 }
 
 // Interfaces de reportes estadísticos

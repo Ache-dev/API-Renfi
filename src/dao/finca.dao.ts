@@ -1,4 +1,5 @@
 import getSupabase, { unwrap, unwrapOne } from "../conexion/supabase";
+import { urlDeImagen } from "../conexion/storage";
 import {
     Finca,
     FincaReservada,
@@ -14,19 +15,36 @@ export type {
     FincaIngresosTop
 };
 
-const SELECT_FINCA = 'IdFinca, IdMunicipio, NumeroDocumentoUsuario, NombreFinca, Direccion, InformacionAdicional, Capacidad, Precio, Estado, Calificacion, Municipio(NombreMunicipio), Usuario(NumeroDocumento, NombreUsuario, ApellidoUsuario, Telefono, Correo), Imagen(IdImagen, UrlImagen, IdFinca)';
+const SELECT_FINCA = 'IdFinca, IdMunicipio, NumeroDocumentoUsuario, NombreFinca, Direccion, InformacionAdicional, Capacidad, Precio, Estado, Calificacion, Habitaciones, Banos, Camas, NochesMinimas, Comodidades, Reglas, HoraEntrada, HoraSalida, PermiteMascotas, PermiteEventos, Latitud, Longitud, Municipio(NombreMunicipio), Usuario(NumeroDocumento, NombreUsuario, ApellidoUsuario, Telefono, Correo), Imagen(IdImagen, UrlImagen, RutaStorage, IdFinca, Orden, EsPortada, TextoAlternativo, Ancho, Alto)';
 
-const aplanar = ({ Municipio: m, Usuario: u, Imagen: imagenes, ...f }: any): Finca => ({
-    ...f,
-    Imagenes: imagenes ?? [],
-    NombreMunicipio: m?.NombreMunicipio ?? null,
-    IdPropietario: u?.NumeroDocumento ?? null,
-    NombrePropietario: u?.NombreUsuario ?? null,
-    ApellidoPropietario: u?.ApellidoUsuario ?? null,
-    TelefonoPropietario: u?.Telefono ?? null,
-    CorreoPropietario: u?.Correo ?? null,
-    Dueno: u?.NombreUsuario ?? null
-});
+// Columnas de la ficha completa (la base les da un valor por defecto si no se envían)
+const CAMPOS_FICHA = ['Habitaciones', 'Banos', 'Camas', 'NochesMinimas', 'Comodidades', 'Reglas', 'HoraEntrada', 'HoraSalida', 'PermiteMascotas', 'PermiteEventos', 'Latitud', 'Longitud'] as const;
+
+const fichaDe = (finca: Finca): Record<string, unknown> =>
+    Object.fromEntries(CAMPOS_FICHA.filter((c) => (finca as any)[c] !== undefined).map((c) => [c, (finca as any)[c]]));
+
+const hhmm = (hora?: string | null) => (hora ? String(hora).slice(0, 5) : null);
+
+const aplanar = ({ Municipio: m, Usuario: u, Imagen: imagenes, ...f }: any): Finca => {
+    // Galería ordenada: portada primero y luego por orden, con la URL final de cada imagen
+    const galeria = (imagenes ?? [])
+        .map(({ RutaStorage, ...i }: any) => ({ ...i, UrlImagen: urlDeImagen({ RutaStorage, UrlImagen: i.UrlImagen }) }))
+        .sort((a: any, b: any) => Number(b.EsPortada) - Number(a.EsPortada) || a.Orden - b.Orden || a.IdImagen - b.IdImagen);
+    return {
+        ...f,
+        HoraEntrada: hhmm(f.HoraEntrada),
+        HoraSalida: hhmm(f.HoraSalida),
+        Imagenes: galeria,
+        UrlPortada: galeria[0]?.UrlImagen ?? null,
+        NombreMunicipio: m?.NombreMunicipio ?? null,
+        IdPropietario: u?.NumeroDocumento ?? null,
+        NombrePropietario: u?.NombreUsuario ?? null,
+        ApellidoPropietario: u?.ApellidoUsuario ?? null,
+        TelefonoPropietario: u?.Telefono ?? null,
+        CorreoPropietario: u?.Correo ?? null,
+        Dueno: u?.NombreUsuario ?? null
+    };
+};
 
 /**
  * Lista todas las fincas con información de municipio y propietario.
@@ -50,7 +68,8 @@ export const insertar = async (finca: Finca): Promise<number> => {
             Capacidad: finca.Capacidad ?? 0,
             Precio: finca.Precio ?? 0,
             Estado: finca.Estado ?? 'Disponible',
-            Calificacion: finca.Calificacion ?? 5
+            Calificacion: finca.Calificacion ?? 5,
+            ...fichaDe(finca)
         }).select('IdFinca').single()
     );
     return Number(fila.IdFinca);
@@ -67,7 +86,8 @@ export const actualizar = async (finca: Finca): Promise<void> => {
             InformacionAdicional: finca.InformacionAdicional ?? null,
             Capacidad: finca.Capacidad ?? 0,
             Precio: finca.Precio ?? 0,
-            Estado: finca.Estado ?? 'Disponible'
+            Estado: finca.Estado ?? 'Disponible',
+            ...fichaDe(finca)
         }).eq('IdFinca', finca.IdFinca)
     );
 };

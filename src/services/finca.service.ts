@@ -1,4 +1,6 @@
 import * as fincaDao from '../dao/finca.dao';
+import * as imagenDao from '../dao/imagen.dao';
+import * as storage from '../conexion/storage';
 import { 
     Finca, 
     CrearFincaDto, 
@@ -100,6 +102,76 @@ const SEED_FINCAS: Finca[] = [
 
 const fallbackFincas: Finca[] = [...SEED_FINCAS];
 
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const entero = (campo: string, v: unknown, min: number, max: number): number => {
+    const n = Number(v);
+    if (v === '' || v === null || !Number.isInteger(n) || n < min || n > max) {
+        throw new AppError(`${campo} debe ser un entero entre ${min} y ${max}`, 400);
+    }
+    return n;
+};
+const booleano = (campo: string, v: unknown): boolean => {
+    if (v === true || v === 'true' || v === '1' || v === 1) return true;
+    if (v === false || v === 'false' || v === '0' || v === 0) return false;
+    throw new AppError(`${campo} debe ser verdadero o falso`, 400);
+};
+const hora = (campo: string, v: unknown): string => {
+    if (typeof v !== 'string' || !HORA.test(v.trim())) throw new AppError(`${campo} debe tener formato HH:MM (24 horas)`, 400);
+    return v.trim();
+};
+const coordenada = (campo: string, v: unknown, limite: number): number | null => {
+    if (v === null || v === '') return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || Math.abs(n) > limite) throw new AppError(`${campo} debe estar entre -${limite} y ${limite}`, 400);
+    return Math.round(n * 1e6) / 1e6;
+};
+
+/**
+ * Valida y normaliza los datos de la ficha de una finca. Solo devuelve los campos recibidos,
+ * así una actualización parcial no pisa lo que no se envió.
+ */
+export const normalizarFicha = (dto: CrearFincaDto | ActualizarFincaDto): Partial<Finca> => {
+    const f: Partial<Finca> = {};
+    // Estos campos tienen valor por defecto y no admiten NULL: un valor vacío (formularios) significa "sin cambio"
+    const d: any = { ...dto };
+    for (const c of ['Habitaciones', 'Banos', 'Camas', 'NochesMinimas', 'PermiteMascotas', 'PermiteEventos', 'HoraEntrada', 'HoraSalida']) {
+        if (d[c] === null || d[c] === '') delete d[c];
+    }
+    dto = d;
+    if (dto.Habitaciones !== undefined) f.Habitaciones = entero('Habitaciones', dto.Habitaciones, 0, 100);
+    if (dto.Banos !== undefined) f.Banos = entero('Banos', dto.Banos, 0, 100);
+    if (dto.Camas !== undefined) f.Camas = entero('Camas', dto.Camas, 0, 200);
+    if (dto.NochesMinimas !== undefined) f.NochesMinimas = entero('NochesMinimas', dto.NochesMinimas, 1, 30);
+    if (dto.PermiteMascotas !== undefined) f.PermiteMascotas = booleano('PermiteMascotas', dto.PermiteMascotas);
+    if (dto.PermiteEventos !== undefined) f.PermiteEventos = booleano('PermiteEventos', dto.PermiteEventos);
+    if (dto.HoraEntrada !== undefined) f.HoraEntrada = hora('HoraEntrada', dto.HoraEntrada);
+    if (dto.HoraSalida !== undefined) f.HoraSalida = hora('HoraSalida', dto.HoraSalida);
+
+    if (dto.Reglas !== undefined) {
+        const reglas = dto.Reglas === null ? '' : String(dto.Reglas).trim();
+        if (reglas.length > 1000) throw new AppError('Reglas no puede superar 1000 caracteres', 400);
+        f.Reglas = reglas || null;
+    }
+    if (dto.Comodidades !== undefined) {
+        const lista = Array.isArray(dto.Comodidades) ? dto.Comodidades : String(dto.Comodidades ?? '').split(',');
+        const limpias = [...new Set(lista.map((c) => String(c).trim()).filter(Boolean))];
+        if (limpias.length > 30 || limpias.some((c) => c.length > 50)) {
+            throw new AppError('Comodidades admite hasta 30 elementos de máximo 50 caracteres', 400);
+        }
+        f.Comodidades = limpias;
+    }
+    if (dto.Latitud !== undefined || dto.Longitud !== undefined) {
+        const lat = coordenada('Latitud', dto.Latitud ?? null, 90);
+        const lon = coordenada('Longitud', dto.Longitud ?? null, 180);
+        if ((lat === null) !== (lon === null)) throw new AppError('Latitud y Longitud deben enviarse juntas', 400);
+        f.Latitud = lat;
+        f.Longitud = lon;
+    }
+    return f;
+};
+
+
 /**
  * Obtiene todas las fincas registradas con tolerancia a fallos.
  */
@@ -143,7 +215,8 @@ export const crearFinca = async (dto: CrearFincaDto): Promise<{ id: number; finc
         Capacidad: Number(dto.Capacidad) || 0,
         Precio: Number(dto.Precio) || 0,
         Estado: dto.Estado || 'Disponible',
-        Calificacion: Number(dto.Calificacion) || 5
+        Calificacion: Number(dto.Calificacion) || 5,
+        ...normalizarFicha(dto)
     };
 
     let id = Date.now() % 1000000;
@@ -185,7 +258,8 @@ export const actualizarFinca = async (id: number, dto: ActualizarFincaDto): Prom
         Capacidad: dto.Capacidad !== undefined ? Number(dto.Capacidad) : existente.Capacidad,
         Precio: dto.Precio !== undefined ? Number(dto.Precio) : existente.Precio,
         Estado: dto.Estado !== undefined ? dto.Estado : existente.Estado,
-        Calificacion: dto.Calificacion !== undefined ? Number(dto.Calificacion) : existente.Calificacion
+        Calificacion: dto.Calificacion !== undefined ? Number(dto.Calificacion) : existente.Calificacion,
+        ...normalizarFicha(dto)
     };
 
     try {
@@ -215,7 +289,10 @@ export const eliminarPorId = async (id: number): Promise<void> => {
         throw new AppError(`Finca con ID ${id} no encontrada`, 404);
     }
     try {
+        // Rutas de los archivos antes de borrar: las filas de Imagen caen en cascada con la finca
+        const rutas = (await imagenDao.buscarPorIdFinca(id)).map((i) => i.RutaStorage).filter((r): r is string => Boolean(r));
         await fincaDao.eliminarPorId(id);
+        await storage.borrarImagenes(rutas).catch((e) => console.error('[FincaService] No se pudieron borrar las imágenes de Storage:', e));
     } catch (err) {
         if (!esErrorDeConexion(err)) throw err;
         console.warn(`[FincaService] Conexión a BD no disponible al eliminar finca.`);
