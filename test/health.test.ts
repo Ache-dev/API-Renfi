@@ -9,11 +9,19 @@ test('/health', async () => {
     assert.strictEqual((await fetch(`${baseUrl()}/health`)).status, 200);
 });
 
-for (const r of ['usuario', 'finca', 'imagen', 'metododepago', 'municipio', 'pago', 'reserva', 'factura', 'rol']) {
-    test(`GET /api/${r}`, async () => {
+// Catálogos públicos
+for (const r of ['finca', 'imagen', 'municipio']) {
+    test(`GET /api/${r} es público`, async () => {
         const res = await fetch(`${baseUrl()}/api/${r}`);
         assert.strictEqual(res.status, 200);
         const body: any = await res.json();
         assert.ok(Array.isArray(body) || Array.isArray(body.data), JSON.stringify(body).slice(0, 200));
+    });
+}
+
+// Todo lo demás exige sesión
+for (const r of ['usuario', 'metododepago', 'pago', 'reserva', 'factura', 'rol']) {
+    test(`GET /api/${r} sin token -> 401`, async () => {
+        assert.strictEqual((await fetch(`${baseUrl()}/api/${r}`)).status, 401);
     });
 }
