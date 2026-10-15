@@ -7,8 +7,7 @@
     "start": "ts-node-dev --respawn --transpile-only src/index.ts",
     "serve": "node dist/index.js",
     "tsc": "tsc",
-    "test": "node --require ts-node/register/transpile-only --test \"test/**/*.test.ts\"",
-    "migrar:imagenes": "ts-node --transpile-only src/scripts/migrar-imagenes.ts"
+    "test": "node --require ts-node/register/transpile-only --test \"test/**/*.test.ts\""
   },
   "keywords": [],
   "author": "",
