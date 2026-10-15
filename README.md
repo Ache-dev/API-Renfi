@@ -296,6 +296,17 @@ Las fotos se alojan en **Supabase Storage** (bucket público `fincas-imagenes`);
 - La primera imagen de una finca queda como **portada**. `PUT /api/imagen/:id` cambia portada, orden o texto alternativo; `DELETE /api/imagen/:id` borra la fila y el archivo (y la siguiente imagen pasa a ser portada). `POST /api/imagen` registra una URL externa (solo https).
 - `GET /api/finca` y `GET /api/finca/:id` devuelven `Imagenes` (portada primero, con la URL final de cada una) y `UrlPortada`.
 
+**Migrar imágenes con URL externa a Storage** (una sola vez, o cuando se registren más por URL):
+
+```bash
+npm run migrar:imagenes                  # simula: lista lo pendiente sin descargar ni escribir
+npm run migrar:imagenes -- --ejecutar    # migra de verdad (SUPABASE_KEY debe ser la clave secret)
+```
+
+- Descarga cada imagen (solo `https` hacia hosts públicos; se bloquean IPs internas y se validan las redirecciones; máx. 15 MB), la optimiza a WebP y la sube a `finca-{id}/{uuid}.webp`.
+- Es **idempotente**: solo toma las imágenes sin `RutaStorage`, así que se puede repetir. Una imagen que falla no detiene a las demás y el script termina con código 1 e informa el motivo.
+- `UrlImagen` se conserva como registro del origen; la URL que reciben los clientes sale de `RutaStorage`. Para **revertir** una imagen basta `UPDATE "Imagen" SET "RutaStorage" = NULL WHERE "IdImagen" = ...`.
+
 **Ficha de la finca** (se envía en `POST/PUT /api/finca`): `Habitaciones`, `Banos`, `Camas`, `NochesMinimas`, `Comodidades` (lista o texto separado por comas), `Reglas`, `HoraEntrada`/`HoraSalida` (`HH:MM`), `PermiteMascotas`, `PermiteEventos`, `Latitud`/`Longitud` (deben ir juntas). La API valida rangos y la base los refuerza con restricciones.
 
 ---
