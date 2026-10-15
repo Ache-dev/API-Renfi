@@ -2,13 +2,15 @@ import { Router } from 'express';
 import * as pagoController from '../controllers/pago.controller';
 import * as pagoDao from '../dao/pago.dao';
 import { validarId } from '../middlewares/validate-id.middleware';
-import { autenticarJwt, soloAdmin, duenoOAdmin } from '../middlewares/auth.middleware';
+import { autenticarJwt, soloAdmin, adminODueno, duenoOAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
 router.get('/report/pendientes', ...soloAdmin, pagoController.getPagosPendientes);
 
 router.get('/', ...soloAdmin, pagoController.getPagos);
+// Pagos recibidos por las fincas del dueño autenticado
+router.get('/mis-fincas', ...adminODueno, pagoController.getMisPagos);
 // Un cliente solo puede pagar sus propias facturas (lo verifica el servicio)
 router.post('/', autenticarJwt, pagoController.crearPago);
 

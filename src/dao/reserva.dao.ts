@@ -119,6 +119,20 @@ export const listarPorUsuario = async (numeroDocumento: number): Promise<Reserva
 };
 
 /**
+ * Reservas hechas sobre las fincas de un propietario.
+ */
+export const listarPorPropietario = async (numeroDocumento: number): Promise<Reserva[]> => {
+    const fincas: any[] = await unwrap(getSupabase().from('Finca').select('IdFinca').eq('NumeroDocumentoUsuario', numeroDocumento));
+    if (fincas.length === 0) return [];
+    const filas: any[] = await unwrap(
+        getSupabase().from('Reserva').select(SELECT_RESERVA)
+            .in('IdFinca', fincas.map((f) => f.IdFinca))
+            .order('FechaReserva', { ascending: false })
+    );
+    return filas.map(aplanar);
+};
+
+/**
  * Cuenta reservas no canceladas de la finca que se solapan con [entrada, salida).
  */
 export const contarSolapes = async (idFinca: number, entrada: Date, salida: Date, excluirId = 0): Promise<number> => {
@@ -138,6 +152,14 @@ export const contarSolapes = async (idFinca: number, entrada: Date, salida: Date
 export const precioFinca = async (idFinca: number): Promise<number | null> => {
     const fila: any = await unwrap(getSupabase().from('Finca').select('Precio').eq('IdFinca', idFinca).maybeSingle());
     return fila ? Number(fila.Precio) : null;
+};
+
+/**
+ * Estado de la finca (null si no existe).
+ */
+export const estadoFinca = async (idFinca: number): Promise<string | null> => {
+    const fila: any = await unwrap(getSupabase().from('Finca').select('Estado').eq('IdFinca', idFinca).maybeSingle());
+    return fila ? String(fila.Estado ?? '') : null;
 };
 
 /**

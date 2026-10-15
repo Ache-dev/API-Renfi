@@ -11,6 +11,13 @@ export const getPagos = async (): Promise<Pago[]> => {
 };
 
 /**
+ * Pagos recibidos por las fincas de un propietario.
+ */
+export const getPagosDePropietario = async (numeroDocumento: number): Promise<Pago[]> => {
+    return await pagoDao.listarPorPropietario(numeroDocumento);
+};
+
+/**
  * Busca un pago por su ID.
  */
 export const buscarPorId = async (id: number): Promise<Pago | null> => {

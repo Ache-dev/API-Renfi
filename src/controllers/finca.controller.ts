@@ -1,6 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import * as fincaService from '../services/finca.service';
 import { AppError } from '../middlewares/error.middleware';
+import { esAdmin } from '../middlewares/auth.middleware';
+
+/**
+ * Fincas del dueño autenticado.
+ */
+export const getMisFincas = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        res.status(200).json(await fincaService.getFincasDePropietario(Number(req.user?.NumeroDocumento)));
+    } catch (error) {
+        next(error);
+    }
+};
 
 /**
  * Obtiene el listado de todas las fincas.
@@ -37,7 +49,11 @@ export const buscarPorId = async (req: Request, res: Response, next: NextFunctio
  */
 export const crearFinca = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const resultado = await fincaService.crearFinca(req.body);
+        // Un dueño solo publica fincas a su nombre y no se asigna calificación
+        const dto = esAdmin(req.user)
+            ? req.body
+            : { ...req.body, NumeroDocumentoUsuario: req.user?.NumeroDocumento, Calificacion: undefined };
+        const resultado = await fincaService.crearFinca(dto);
         res.status(201).json({
             message: 'Finca creada correctamente',
             id: resultado.id,
@@ -55,7 +71,9 @@ export const crearFinca = async (req: Request, res: Response, next: NextFunction
 export const actualizarFinca = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const id = Number(req.params.id);
-        const actualizada = await fincaService.actualizarFinca(id, req.body);
+        // Un dueño no traspasa la finca a otra persona ni cambia la calificación
+        const { NumeroDocumentoUsuario: _dueno, Calificacion: _calificacion, ...permitido } = req.body ?? {};
+        const actualizada = await fincaService.actualizarFinca(id, esAdmin(req.user) ? req.body : permitido);
         res.status(200).json({
             message: 'Finca actualizada correctamente',
             finca: actualizada

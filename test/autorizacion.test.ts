@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { ready, baseUrl, stop } from './helpers';
 import envConfig from '../src/config/env.config';
 import * as usuarioDao from '../src/dao/usuario.dao';
+import * as fincaDao from '../src/dao/finca.dao';
 import { huellaContrasena } from '../src/middlewares/auth.middleware';
 
 // Usuarios simulados: la validación del token consulta al usuario actual en la base de datos.
@@ -15,6 +16,8 @@ const original = JSON.stringify(usuarios);
 
 before(async () => {
     mock.method(usuarioDao, 'buscarPorId', async (id: number) => (usuarios[id] ? { ...usuarios[id] } : null));
+    // La finca 1 es del administrador (documento 1)
+    mock.method(fincaDao, 'propietarioDe', async (id: number) => (id === 1 ? 1 : null));
     await ready;
 });
 after(async () => {

@@ -17,6 +17,29 @@ export const listar = async (req: Request, res: Response, next: NextFunction): P
 };
 
 /**
+ * Reservas recibidas en las fincas del dueño autenticado.
+ */
+export const listarMisFincas = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        res.status(200).json(await reservaService.listarPorPropietario(Number(req.user?.NumeroDocumento)));
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * El dueño de la finca (o el administrador) confirma, finaliza o cancela una reserva.
+ */
+export const cambiarEstado = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const reserva = await reservaService.cambiarEstado(Number(req.params.id), req.body?.Estado);
+        res.status(200).json({ message: 'Estado de la reserva actualizado', reserva });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Busca una reserva por su ID.
  */
 export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

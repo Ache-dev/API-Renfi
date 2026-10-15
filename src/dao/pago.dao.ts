@@ -59,6 +59,22 @@ export const listar = async (): Promise<Pago[]> => {
 };
 
 /**
+ * Pagos recibidos por las reservas de las fincas de un propietario.
+ */
+export const listarPorPropietario = async (numeroDocumento: number): Promise<Pago[]> => {
+    const fincas: any[] = await unwrap(getSupabase().from('Finca').select('IdFinca').eq('NumeroDocumentoUsuario', numeroDocumento));
+    if (fincas.length === 0) return [];
+    const reservas: any[] = await unwrap(getSupabase().from('Reserva').select('IdReserva').in('IdFinca', fincas.map((f) => f.IdFinca)));
+    if (reservas.length === 0) return [];
+    const facturas: any[] = await unwrap(getSupabase().from('Factura').select('IdFactura').in('IdReserva', reservas.map((r) => r.IdReserva)));
+    if (facturas.length === 0) return [];
+    const filas: any[] = await unwrap(
+        getSupabase().from('Pago').select(SELECT_PAGO).in('IdFactura', facturas.map((f) => f.IdFactura)).order('IdPago', { ascending: false })
+    );
+    return filas.map(aplanar);
+};
+
+/**
  * Inserta un nuevo pago y retorna el IdPago generado.
  */
 export const insertar = async (pago: Pago): Promise<number> => {

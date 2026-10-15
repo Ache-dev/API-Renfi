@@ -81,15 +81,36 @@ export const insertar = async (finca: Finca): Promise<number> => {
 export const actualizar = async (finca: Finca): Promise<void> => {
     await unwrap(
         getSupabase().from('Finca').update({
+            IdMunicipio: finca.IdMunicipio,
+            NumeroDocumentoUsuario: finca.NumeroDocumentoUsuario,
             NombreFinca: finca.NombreFinca,
             Direccion: finca.Direccion,
             InformacionAdicional: finca.InformacionAdicional ?? null,
             Capacidad: finca.Capacidad ?? 0,
             Precio: finca.Precio ?? 0,
             Estado: finca.Estado ?? 'Disponible',
+            Calificacion: finca.Calificacion ?? 5,
             ...fichaDe(finca)
         }).eq('IdFinca', finca.IdFinca)
     );
+};
+
+/**
+ * Fincas de un propietario (con el mismo detalle que el catálogo).
+ */
+export const listarPorPropietario = async (numeroDocumento: number): Promise<Finca[]> => {
+    const filas: any[] = await unwrap(
+        getSupabase().from('Finca').select(SELECT_FINCA).eq('NumeroDocumentoUsuario', numeroDocumento).order('IdFinca')
+    );
+    return filas.map(aplanar);
+};
+
+/**
+ * Documento del propietario de la finca (null si la finca no existe).
+ */
+export const propietarioDe = async (idFinca: number): Promise<number | null> => {
+    const fila: any = await unwrap(getSupabase().from('Finca').select('NumeroDocumentoUsuario').eq('IdFinca', idFinca).maybeSingle());
+    return fila ? Number(fila.NumeroDocumentoUsuario) : null;
 };
 
 /**

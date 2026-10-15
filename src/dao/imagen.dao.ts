@@ -109,6 +109,15 @@ export const buscarPorId = async (id: number): Promise<Imagen | null> => {
 };
 
 /**
+ * Documento del propietario de la finca a la que pertenece la imagen (null si la imagen no existe).
+ */
+export const propietarioDe = async (id: number): Promise<number | null> => {
+    const fila: any = await unwrap(getSupabase().from('Imagen').select('Finca(NumeroDocumentoUsuario)').eq('IdImagen', id).maybeSingle());
+    const dueno = fila?.Finca?.NumeroDocumentoUsuario;
+    return dueno === undefined || dueno === null ? null : Number(dueno);
+};
+
+/**
  * Primera imagen de la galería de la finca (para ascender a portada), sin contar `excluirId`.
  */
 export const primeraDeFinca = async (idFinca: number, excluirId: number): Promise<Imagen | null> => {

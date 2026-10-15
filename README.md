@@ -255,6 +255,22 @@ El proyecto está 100% preparado y optimizado para ejecutarse sobre **Supabase**
 
 ---
 
+## 🏡 Rol "Dueño de finca"
+
+Aplica `db/migraciones/003_rol_dueno_de_finca.sql` (crea o renombra el rol; la API lo reconoce por nombre). Un dueño puede:
+
+| Acción | Endpoint |
+|---|---|
+| Registrarse como dueño (registro público) | `POST /api/usuario` con `"TipoCuenta": "dueno"` |
+| Ver sus fincas | `GET /api/finca/mias` |
+| Publicar una finca (siempre a su nombre) | `POST /api/finca` |
+| Editar / eliminar **sus** fincas | `PUT` / `DELETE /api/finca/:id` |
+| Subir, ordenar, poner portada y borrar fotos de **sus** fincas | `POST /api/finca/:id/imagenes`, `PUT` / `DELETE /api/imagen/:id` |
+| Ver reservas y pagos de sus fincas | `GET /api/reserva/mis-fincas`, `GET /api/pago/mis-fincas` |
+| Confirmar, finalizar o cancelar una reserva de su finca | `PUT /api/reserva/:id/estado` (`Activa`, `Confirmada`, `Finalizada`, `Cancelada`) |
+
+No puede traspasar fincas, cambiar la calificación ni tocar datos de otros. Una finca con `Estado: "No disponible"` no recibe reservas nuevas.
+
 ## 🔐 Seguridad y permisos
 
 La API es la **única puerta de entrada** a la base de datos: las apps (Expo, Angular) nunca hablan con Supabase directamente.

@@ -1,7 +1,7 @@
 -- Seed demo de Renfi: fuente unica de verdad (antes SEED_FINCAS / SEED_USUARIOS en memoria).
 -- Idempotente. Se aplica al iniciar la BD cuando public."Finca" tiene 0 filas.
 
-INSERT INTO public."Rol" ("IdRol", "NombreRol") VALUES (1,'Administrador'),(2,'Cliente'),(3,'Propietario') ON CONFLICT DO NOTHING;
+INSERT INTO public."Rol" ("IdRol", "NombreRol") VALUES (1,'Administrador'),(2,'Cliente'),(3,'Dueño de finca') ON CONFLICT DO NOTHING;
 
 INSERT INTO public."Municipio" ("IdMunicipio", "NombreMunicipio") OVERRIDING SYSTEM VALUE VALUES
 (1,'Medellín'),(2,'Guatapé'),(3,'Santa Fe de Antioquia'),(4,'Jardín'),(5,'Jericó'),(6,'Rionegro'),
@@ -13,7 +13,8 @@ ON CONFLICT DO NOTHING;
 INSERT INTO public."Usuario" ("NumeroDocumento","IdRol","NombreUsuario","ApellidoUsuario","Telefono","Contrasena","Correo","Estado") OVERRIDING SYSTEM VALUE VALUES
 (1,1,'Admin','Renfi','3001234567','admin123','admin@renfi.com','Activo'),
 (10002,2,'Juan','Pérez','3109876543','cliente123','juan.perez@example.com','Activo'),
-(10003,2,'Cliente','Demo','3114567890','cliente123','cliente@renfi.com','Activo')
+(10003,2,'Cliente','Demo','3114567890','cliente123','cliente@renfi.com','Activo'),
+(10004,3,'Dueño','Demo','3125551234','dueno123','dueno@renfi.com','Activo')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public."Finca" ("IdFinca","IdMunicipio","NumeroDocumentoUsuario","NombreFinca","Direccion","InformacionAdicional","Capacidad","Precio","Estado","Calificacion")

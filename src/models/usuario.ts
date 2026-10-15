@@ -34,6 +34,8 @@ export interface UsuarioNormalizado {
  */
 export interface RegistroUsuarioDto {
     IdRol?: number | undefined;
+    /** Solo en el registro público: 'dueno' crea una cuenta de dueño de finca; cualquier otro valor, un cliente. */
+    TipoCuenta?: string | undefined;
     NombreUsuario: string;
     ApellidoUsuario: string;
     Telefono?: string | undefined;

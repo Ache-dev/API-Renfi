@@ -16,6 +16,17 @@ export const getPagos = async (_req: Request, res: Response, next: NextFunction)
 };
 
 /**
+ * Pagos recibidos por las fincas del dueño autenticado.
+ */
+export const getMisPagos = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        res.status(200).json(await pagoService.getPagosDePropietario(Number(req.user?.NumeroDocumento)));
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Busca un pago por su ID.
  */
 export const buscarPorId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

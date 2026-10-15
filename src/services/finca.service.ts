@@ -199,12 +199,29 @@ export const buscarPorId = async (id: number): Promise<Finca | null> => {
 };
 
 /**
+ * Fincas que pertenecen a un propietario (panel del dueño de finca).
+ */
+export const getFincasDePropietario = async (numeroDocumento: number): Promise<Finca[]> => {
+    return await fincaDao.listarPorPropietario(numeroDocumento);
+};
+
+export const ESTADOS_FINCA = ['Disponible', 'No disponible'];
+
+const validarEstado = (estado: unknown): string => {
+    const valido = ESTADOS_FINCA.find((e) => e.toLowerCase() === String(estado ?? '').trim().toLowerCase());
+    if (!valido) throw new AppError(`Estado debe ser uno de: ${ESTADOS_FINCA.join(', ')}`, 400);
+    return valido;
+};
+
+/**
  * Crea una nueva finca validando datos requeridos.
  */
 export const crearFinca = async (dto: CrearFincaDto): Promise<{ id: number; finca: Finca | null }> => {
     if (!dto.NombreFinca || !dto.Direccion || dto.IdMunicipio === undefined || dto.NumeroDocumentoUsuario === undefined) {
         throw new AppError('Los campos NombreFinca, Direccion, IdMunicipio y NumeroDocumentoUsuario son obligatorios', 400);
     }
+    if (!(Number(dto.Precio) > 0)) throw new AppError('El precio por noche debe ser mayor a 0', 400);
+    if (!(Number(dto.Capacidad) >= 1)) throw new AppError('La capacidad debe ser de al menos 1 huésped', 400);
 
     const finca: Finca = {
         IdMunicipio: Number(dto.IdMunicipio),
@@ -214,7 +231,7 @@ export const crearFinca = async (dto: CrearFincaDto): Promise<{ id: number; finc
         InformacionAdicional: dto.InformacionAdicional?.trim() || '',
         Capacidad: Number(dto.Capacidad) || 0,
         Precio: Number(dto.Precio) || 0,
-        Estado: dto.Estado || 'Disponible',
+        Estado: dto.Estado ? validarEstado(dto.Estado) : 'Disponible',
         Calificacion: Number(dto.Calificacion) || 5,
         ...normalizarFicha(dto)
     };
@@ -257,7 +274,8 @@ export const actualizarFinca = async (id: number, dto: ActualizarFincaDto): Prom
         InformacionAdicional: dto.InformacionAdicional !== undefined ? dto.InformacionAdicional.trim() : existente.InformacionAdicional,
         Capacidad: dto.Capacidad !== undefined ? Number(dto.Capacidad) : existente.Capacidad,
         Precio: dto.Precio !== undefined ? Number(dto.Precio) : existente.Precio,
-        Estado: dto.Estado !== undefined ? dto.Estado : existente.Estado,
+        // Un estado heredado que no se toca se respeta; uno nuevo debe ser válido
+        Estado: dto.Estado !== undefined && dto.Estado !== existente.Estado ? validarEstado(dto.Estado) : existente.Estado,
         Calificacion: dto.Calificacion !== undefined ? Number(dto.Calificacion) : existente.Calificacion,
         ...normalizarFicha(dto)
     };

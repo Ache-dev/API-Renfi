@@ -98,6 +98,20 @@ export const autenticarOpcional = async (req: Request, _res: Response, next: Nex
 
 export const esAdmin = (u?: UserPayload): boolean => Number(u?.IdRol) === 1;
 
+/** Nombre oficial del rol que publica y administra sus propias fincas (db/migraciones/003). */
+export const ROL_DUENO = 'Dueño de finca';
+
+const sinTildes = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+// "Propietario" es el nombre heredado del seed anterior a la migración 003
+const NOMBRES_DUENO = [sinTildes(ROL_DUENO), 'propietario'];
+
+/**
+ * El rol se reconoce por nombre (no por Id) porque los Id los genera la base.
+ */
+export const esNombreRolDueno = (nombre?: string | null): boolean => NOMBRES_DUENO.includes(sinTildes(String(nombre ?? '')));
+
+export const esDueno = (u?: UserPayload): boolean => esNombreRolDueno(u?.NombreRol);
+
 /**
  * Exige sesión iniciada y rol de administrador.
  */
@@ -105,6 +119,16 @@ export const soloAdmin = [
     autenticarJwt,
     (req: Request, _res: Response, next: NextFunction): void => {
         next(esAdmin(req.user) ? undefined : new AppError('No tienes permisos para realizar esta acción.', 403));
+    }
+];
+
+/**
+ * Exige sesión iniciada y rol de administrador o de dueño de finca.
+ */
+export const adminODueno = [
+    autenticarJwt,
+    (req: Request, _res: Response, next: NextFunction): void => {
+        next(esAdmin(req.user) || esDueno(req.user) ? undefined : new AppError('Esta acción es solo para dueños de finca y administradores.', 403));
     }
 ];
 

@@ -32,6 +32,25 @@ export const listarPorUsuario = async (numeroDocumento: number): Promise<Reserva
 };
 
 /**
+ * Reservas recibidas en las fincas de un propietario.
+ */
+export const listarPorPropietario = async (numeroDocumento: number): Promise<Reserva[]> => {
+    return await reservaDao.listarPorPropietario(numeroDocumento);
+};
+
+// Estados que el dueño de la finca puede asignar a una reserva
+export const ESTADOS_RESERVA_DUENO = ['Activa', 'Confirmada', 'Finalizada', 'Cancelada'];
+
+/**
+ * El dueño de la finca (o el administrador) cambia el estado de una reserva: confirmarla, finalizarla o cancelarla.
+ */
+export const cambiarEstado = async (id: number, estado: unknown): Promise<Reserva | null> => {
+    const nuevo = ESTADOS_RESERVA_DUENO.find((e) => e.toLowerCase() === String(estado ?? '').trim().toLowerCase());
+    if (!nuevo) throw new AppError(`Estado debe ser uno de: ${ESTADOS_RESERVA_DUENO.join(', ')}`, 400);
+    return await actualizarReserva(id, { Estado: nuevo });
+};
+
+/**
  * Crea una reserva validando fechas y campos obligatorios.
  * Genera automáticamente la factura asociada si se requiere para flujo completo.
  */
@@ -81,6 +100,10 @@ export const crearReserva = async (dto: CrearReservaDto, opciones: { esAdmin?: b
     if (!opciones.esAdmin) {
         const precio = await reservaDao.precioFinca(Number(dto.IdFinca));
         if (precio === null) throw new AppError('La finca indicada no existe', 404);
+        // El dueño puede pausar su finca: mientras no esté disponible no recibe reservas
+        if ((await reservaDao.estadoFinca(Number(dto.IdFinca)))?.trim().toLowerCase() === 'no disponible') {
+            throw new AppError('La finca no está disponible para reservas por ahora', 409);
+        }
         const noches = Math.max(1, Math.round((fechaSalida.getTime() - fechaEntrada.getTime()) / 86_400_000));
         monto = precio * noches;
     }

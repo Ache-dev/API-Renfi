@@ -11,7 +11,8 @@ import {
 } from '../models/usuario';
 import envConfig from '../config/env.config';
 import { AppError } from '../middlewares/error.middleware';
-import { huellaContrasena } from '../middlewares/auth.middleware';
+import { huellaContrasena, esNombreRolDueno, ROL_DUENO } from '../middlewares/auth.middleware';
+import * as rolDao from '../dao/rol.dao';
 
 const BCRYPT_ROUNDS = 10;
 const ES_SHA512 = /^[0-9a-f]{128}$/i;
@@ -168,8 +169,17 @@ export const crearUsuario = async (
     }
 
     const admin = Boolean(quienCrea?.esAdmin);
+
+    // El registro público elige entre cliente (por defecto) y dueño de finca; el rol administrador no se pide por aquí
+    let idRol = admin ? (dto.IdRol ?? 2) : 2;
+    if (!admin && String(dto.TipoCuenta ?? '').toLowerCase() === 'dueno') {
+        const rolDueno = (await rolDao.listar()).find((r) => esNombreRolDueno(r.NombreRol));
+        if (!rolDueno?.IdRol) throw new AppError(`El rol '${ROL_DUENO}' no existe en la base de datos. Aplica db/migraciones/003.`, 500);
+        idRol = rolDueno.IdRol;
+    }
+
     const id = await usuarioDao.insertar({
-        IdRol: admin ? (dto.IdRol ?? 2) : 2,
+        IdRol: idRol,
         NombreUsuario: dto.NombreUsuario.trim(),
         ApellidoUsuario: dto.ApellidoUsuario.trim(),
         Telefono: dto.Telefono?.trim() || '',

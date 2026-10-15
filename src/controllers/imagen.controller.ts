@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as imagenService from '../services/imagen.service';
 import { AppError } from '../middlewares/error.middleware';
+import { esAdmin } from '../middlewares/auth.middleware';
 
 /**
  * Obtiene todas las imágenes.
@@ -76,7 +77,9 @@ export const subirImagenFinca = async (req: Request, res: Response, next: NextFu
 export const actualizarImagen = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const id = Number(req.params.id);
-        const actualizada = await imagenService.actualizarImagen(id, req.body);
+        // Un dueño no mueve imágenes a otra finca (podría ser ajena)
+        const { IdFinca: _finca, ...permitido } = req.body ?? {};
+        const actualizada = await imagenService.actualizarImagen(id, esAdmin(req.user) ? req.body : permitido);
         res.status(200).json({
             message: 'Imagen actualizada correctamente',
             imagen: actualizada
