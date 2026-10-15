@@ -15,15 +15,13 @@ API-Renfi/
 ├── .env                       # Variables de entorno locales
 ├── .env.example               # Plantilla de variables de entorno
 ├── supabase_schema.sql        # Esquema completo DDL, PL/pgSQL y Seed Data para Supabase
-├── BD Renfi.sql               # Script legado original SQL Server
 ├── package.json               # Dependencias y scripts de ejecución
 ├── tsconfig.json              # Configuración de TypeScript
 ├── src/
 │   ├── config/                # Configuración global y variables de entorno tipadas
 │   │   └── env.config.ts
-│   ├── conexion/              # Conectividad a PostgreSQL / Supabase
-│   │   ├── config.ts          # Configuración del Pool pg (DATABASE_URL / SSL)
-│   │   └── connection.ts      # Singleton resiliente del Pool y helper query()
+│   ├── conexion/              # Conectividad a Supabase
+│   │   └── supabase.ts        # Cliente supabase-js (singleton) y helpers unwrap()/contar()
 │   ├── models/                # Entidades del dominio, DTOs y tipos
 │   │   ├── usuario.ts         # Usuario, DTOs y UsuarioNormalizado
 │   │   ├── finca.ts           # Finca, DTOs y Reportes
@@ -101,7 +99,7 @@ API-Renfi/
 
 2. **Calidad de Código y Arquitectura**:
    - **Capa de Servicios**: Se separó la lógica de negocio y las validaciones de las capas de transporte (controladores) y persistencia (DAOs).
-   - **ConnectionPool Singleton**: Manejo seguro del pool de SQL Server con reconexión automática y cierre controlado (*graceful shutdown*).
+   - **Cliente Supabase Singleton**: la API consume la base de datos por HTTPS (PostgREST) con `@supabase/supabase-js`; no mantiene conexiones abiertas.
    - **Manejo Centralizado de Errores**: Middleware global que captura errores síncronos y asíncronos, retornando siempre un payload JSON estructurado `{ success: false, message: ... }`.
    - **Variables de Entorno Tipadas**: Soporte para `.env` a través de `dotenv` con valores por defecto seguros para desarrollo.
    - **Autenticación JWT**: Emisión y validación opcional/obligatoria de JSON Web Tokens con firma segura.
@@ -215,21 +213,14 @@ Copia el archivo `.env.example` como `.env` y configura los valores correspondie
 PORT=3000
 NODE_ENV=development
 
-# Base de Datos (PostgreSQL / Supabase)
-# Opción A (Recomendada para Supabase): Connection string directo o pooler
-DATABASE_URL=postgresql://postgres.[tu-ref-de-proyecto]:[tu-contraseña]@aws-0-[tu-region].pooler.supabase.com:6543/postgres?sslmode=require
+# Supabase (Project Settings -> API)
+SUPABASE_URL=https://<project-ref>.supabase.co
+# Clave secret (sb_secret_...) del backend; nunca en una app
+SUPABASE_KEY=
 
-# Opción B: Credenciales individuales (desarrollo local o PostgreSQL tradicional)
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_DATABASE=postgres
-DB_SSL=false
-
-# Seguridad JWT
-JWT_SECRET=renfi_jwt_super_secret_key_2025_safe_token
-JWT_EXPIRES_IN=7d
+# Seguridad JWT (obligatorio, mínimo 32 caracteres)
+JWT_SECRET=
+JWT_EXPIRES_IN=1d
 
 # CORS
 CORS_ORIGIN=*
@@ -255,11 +246,37 @@ El proyecto está 100% preparado y optimizado para ejecutarse sobre **Supabase**
    - Políticas de seguridad **RLS (Row Level Security)** abiertas para los roles de API.
 
 ### Paso 2: Conectar la API a Supabase
-1. En tu proyecto de Supabase, ve a **Project Settings** -> **Database**.
-2. En la sección **Connection parameters** o **Connection string**, selecciona el modo **URI** (puedes usar el Connection Pooler en modo `Transaction` puerto `6543` o conexión directa puerto `5432`).
-3. Reemplaza `[YOUR-PASSWORD]` por la contraseña de la base de datos de tu proyecto.
-4. Pega la URL en la variable `DATABASE_URL` dentro de tu archivo `.env`.
-5. Inicia la API: `npm run dev` o `npm run serve`. La API se conectará de inmediato a Supabase mediante el pool de `pg`.
+1. En tu proyecto de Supabase, ve a **Project Settings** -> **API**.
+2. Copia la **Project URL** en `SUPABASE_URL` y una API key en `SUPABASE_KEY` de tu archivo `.env` (también se aceptan `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`).
+3. Inicia la API: `npm start` (desarrollo) o `npm run build && npm run serve`. Si falta la configuración, la API falla al arrancar con un mensaje claro.
+
+> La API accede a las **tablas** vía PostgREST (`supabase.from(...)`); no depende de las funciones `SP_*`.
+> Las pruebas (`npm test`) solo hacen lecturas contra el Supabase configurado.
+
+---
+
+## 🔐 Seguridad y permisos
+
+La API es la **única puerta de entrada** a la base de datos: las apps (Expo, Angular) nunca hablan con Supabase directamente.
+
+- **Clave de Supabase:** usa la clave **secret** (`sb_secret_...`) en `SUPABASE_KEY`. Nunca la pongas en una app ni en git.
+- **Sesión:** `POST /api/usuario/login` devuelve un JWT (`JWT_SECRET` es obligatorio, mínimo 32 caracteres; dura `JWT_EXPIRES_IN`, por defecto 1 día). Se envía como `Authorization: Bearer <token>`.
+- **Contraseñas:** se guardan con bcrypt. Los clientes pueden enviarlas en claro o como SHA-512; las contraseñas antiguas (texto plano o SHA-512) se migran a bcrypt en el primer inicio de sesión correcto.
+- **Cancelar un token:** en cada petición la API consulta al usuario en la base. Un token deja de valer al instante si el usuario se desactiva (`Estado` distinto de `Activo`), se elimina, o cambia su contraseña; el rol que se aplica es siempre el actual, no el del token. Un cliente cierra sesión descartando su token.
+- **Fuerza bruta:** login y registro limitan a 10 intentos por IP cada 15 minutos.
+
+| Recurso | Anónimo | Cliente | Administrador |
+|---|---|---|---|
+| `GET` fincas, imágenes, municipios, fechas ocupadas de una finca | Sí | Sí | Sí |
+| `POST /usuario` (registro) | Sí (siempre crea Cliente) | — | Puede elegir rol y estado |
+| `GET/PUT /usuario/:id` | No | Solo el propio (sin cambiar rol, estado ni correo) | Cualquiera |
+| `GET /metododepago` | No | Sí | Sí |
+| `POST /reserva`, `POST /pago` | No | A su nombre; el monto lo calcula la API | Cualquiera |
+| `GET /reserva/usuario/:doc`, `GET /reserva|factura|pago/:id` | No | Solo lo propio | Todo |
+| `PUT /reserva/:id` | No | Solo cancelar la propia | Todo |
+| Listados completos, reportes, roles, y escritura de catálogos | No | No | Sí |
+
+Para cerrar una base Supabase ya creada ejecuta [`db/seguridad.sql`](db/seguridad.sql) (después de desplegar la API con la clave secret).
 
 ---
 
