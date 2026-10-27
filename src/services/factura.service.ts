@@ -1,6 +1,7 @@
 import * as facturaDao from '../dao/factura.dao';
 import { Factura, CrearFacturaDto, ActualizarFacturaDto } from '../models/factura';
 import { AppError } from '../middlewares/error.middleware';
+import { entero, MONTO_MAXIMO } from './validacion';
 
 /**
  * Obtiene todas las facturas registradas.
@@ -31,7 +32,7 @@ export const crearFactura = async (dto: CrearFacturaDto): Promise<{
 
     const factura: Factura = {
         IdReserva: Number(dto.IdReserva),
-        Total: Number(dto.Total),
+        Total: entero('Total', dto.Total, 0, MONTO_MAXIMO),
         FechaFactura: dto.FechaFactura ? new Date(dto.FechaFactura) : new Date()
     };
 
@@ -58,7 +59,7 @@ export const actualizarFactura = async (id: number, dto: ActualizarFacturaDto): 
     const facturaActualizada: Factura = {
         IdFactura: id,
         IdReserva: dto.IdReserva !== undefined ? Number(dto.IdReserva) : existente.IdReserva,
-        Total: dto.Total !== undefined ? Number(dto.Total) : existente.Total,
+        Total: dto.Total !== undefined ? entero('Total', dto.Total, 0, MONTO_MAXIMO) : existente.Total,
         FechaFactura: dto.FechaFactura ? new Date(dto.FechaFactura) : existente.FechaFactura
     };
 

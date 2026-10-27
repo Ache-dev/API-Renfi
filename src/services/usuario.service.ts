@@ -13,9 +13,20 @@ import envConfig from '../config/env.config';
 import { AppError } from '../middlewares/error.middleware';
 import { huellaContrasena, esNombreRolDueno, ROL_DUENO } from '../middlewares/auth.middleware';
 import * as rolDao from '../dao/rol.dao';
+import { texto, entero, unoDe, correo as validarCorreo, telefono, ESTADOS_USUARIO } from './validacion';
 
 const BCRYPT_ROUNDS = 10;
 const ES_SHA512 = /^[0-9a-f]{128}$/i;
+
+/**
+ * Contraseña nueva: en claro mínimo 8 caracteres. Si el cliente ya la envía como SHA-512
+ * la longitud original no se puede comprobar aquí: la valida el formulario del cliente.
+ */
+const validarContrasenaNueva = (v: unknown): string => {
+    const c = texto('Contrasena', v, 128);
+    if (!ES_SHA512.test(c) && c.length < 8) throw new AppError('La contraseña debe tener al menos 8 caracteres', 400);
+    return c;
+};
 
 /**
  * Calcula el hash SHA-512 en minúsculas (formato que envían los clientes Angular y Expo).
@@ -39,6 +50,13 @@ const paraBcrypt = (valor: string): string => crypto.createHash('sha256').update
  * Hash para guardar en la base de datos: bcrypt(sha256(sha512(contraseña))).
  */
 export const hashContrasena = (valor: string): Promise<string> => bcrypt.hash(paraBcrypt(valor), BCRYPT_ROUNDS);
+
+/**
+ * Una contraseña heredada (texto plano o SHA-512) se pasa a bcrypt al guardar el usuario:
+ * la base solo admite bcrypt (db/migraciones/004) y el login la sigue aceptando igual.
+ */
+const aBcrypt = async (almacenada: string): Promise<string> =>
+    almacenada.startsWith('$2') ? almacenada : hashContrasena(almacenada);
 
 /**
  * Verifica una contraseña contra lo almacenado.
@@ -104,8 +122,8 @@ const CREDENCIALES_INVALIDAS = 'Credenciales inválidas. Verifica tu correo y co
  * Autentica un usuario mediante correo y contraseña.
  */
 export const login = async (correoRaw: string, contrasenaRaw: string): Promise<LoginResponseDto> => {
-    const correo = (correoRaw || '').trim().toLowerCase();
-    const contrasena = contrasenaRaw || '';
+    const correo = typeof correoRaw === 'string' ? correoRaw.trim().toLowerCase() : '';
+    const contrasena = typeof contrasenaRaw === 'string' ? contrasenaRaw : '';
 
     if (!correo || !contrasena) {
         throw new AppError('Correo y contraseña son requeridos para iniciar sesión', 400);
@@ -163,7 +181,8 @@ export const crearUsuario = async (
         throw new AppError('Los campos NombreUsuario, ApellidoUsuario, Correo y Contrasena son obligatorios', 400);
     }
 
-    const correo = dto.Correo.trim().toLowerCase();
+    const correo = validarCorreo(dto.Correo);
+    const contrasena = validarContrasenaNueva(dto.Contrasena);
     if (await usuarioDao.buscarPorCorreo(correo)) {
         throw new AppError(`El correo '${correo}' ya se encuentra registrado.`, 409);
     }
@@ -171,7 +190,7 @@ export const crearUsuario = async (
     const admin = Boolean(quienCrea?.esAdmin);
 
     // El registro público elige entre cliente (por defecto) y dueño de finca; el rol administrador no se pide por aquí
-    let idRol = admin ? (dto.IdRol ?? 2) : 2;
+    let idRol = admin && dto.IdRol !== undefined ? entero('IdRol', dto.IdRol, 1, 2_147_483_647) : 2;
     if (!admin && String(dto.TipoCuenta ?? '').toLowerCase() === 'dueno') {
         const rolDueno = (await rolDao.listar()).find((r) => esNombreRolDueno(r.NombreRol));
         if (!rolDueno?.IdRol) throw new AppError(`El rol '${ROL_DUENO}' no existe en la base de datos. Aplica db/migraciones/003.`, 500);
@@ -180,12 +199,12 @@ export const crearUsuario = async (
 
     const id = await usuarioDao.insertar({
         IdRol: idRol,
-        NombreUsuario: dto.NombreUsuario.trim(),
-        ApellidoUsuario: dto.ApellidoUsuario.trim(),
-        Telefono: dto.Telefono?.trim() || '',
-        Contrasena: await hashContrasena(dto.Contrasena),
+        NombreUsuario: texto('NombreUsuario', dto.NombreUsuario, 100),
+        ApellidoUsuario: texto('ApellidoUsuario', dto.ApellidoUsuario, 100),
+        Telefono: telefono(dto.Telefono),
+        Contrasena: await hashContrasena(contrasena),
         Correo: correo,
-        Estado: admin ? (dto.Estado || 'Activo') : 'Activo'
+        Estado: admin && dto.Estado ? unoDe('Estado', dto.Estado, ESTADOS_USUARIO) : 'Activo'
     });
 
     const creado = await usuarioDao.buscarPorId(id);
@@ -208,7 +227,7 @@ export const actualizarUsuario = async (
     }
 
     const admin = Boolean(quienActualiza?.esAdmin);
-    const nuevoCorreo = admin && dto.Correo !== undefined ? dto.Correo.trim().toLowerCase() : existente.Correo;
+    const nuevoCorreo = admin && dto.Correo !== undefined ? validarCorreo(dto.Correo) : existente.Correo.trim().toLowerCase();
     if (nuevoCorreo.toLowerCase() !== existente.Correo.toLowerCase()) {
         const otro = await usuarioDao.buscarPorCorreo(nuevoCorreo);
         if (otro && otro.NumeroDocumento !== id) throw new AppError(`El correo '${nuevoCorreo}' ya se encuentra registrado.`, 409);
@@ -216,13 +235,15 @@ export const actualizarUsuario = async (
 
     await usuarioDao.actualizar({
         NumeroDocumento: id,
-        IdRol: admin && dto.IdRol !== undefined ? dto.IdRol : existente.IdRol,
-        NombreUsuario: dto.NombreUsuario !== undefined ? dto.NombreUsuario.trim() : existente.NombreUsuario,
-        ApellidoUsuario: dto.ApellidoUsuario !== undefined ? dto.ApellidoUsuario.trim() : existente.ApellidoUsuario,
-        Telefono: dto.Telefono !== undefined ? dto.Telefono.trim() : existente.Telefono,
-        Contrasena: dto.Contrasena !== undefined && dto.Contrasena.trim() !== '' ? await hashContrasena(dto.Contrasena) : existente.Contrasena,
+        IdRol: admin && dto.IdRol !== undefined ? entero('IdRol', dto.IdRol, 1, 2_147_483_647) : existente.IdRol,
+        NombreUsuario: dto.NombreUsuario !== undefined ? texto('NombreUsuario', dto.NombreUsuario, 100) : existente.NombreUsuario,
+        ApellidoUsuario: dto.ApellidoUsuario !== undefined ? texto('ApellidoUsuario', dto.ApellidoUsuario, 100) : existente.ApellidoUsuario,
+        Telefono: dto.Telefono !== undefined ? telefono(dto.Telefono) : existente.Telefono,
+        Contrasena: dto.Contrasena !== undefined && String(dto.Contrasena).trim() !== ''
+            ? await hashContrasena(validarContrasenaNueva(dto.Contrasena))
+            : await aBcrypt(existente.Contrasena ?? ''),
         Correo: nuevoCorreo,
-        Estado: admin && dto.Estado !== undefined ? dto.Estado : existente.Estado
+        Estado: admin && dto.Estado !== undefined ? unoDe('Estado', dto.Estado, ESTADOS_USUARIO) : existente.Estado
     });
 
     const actualizado = await usuarioDao.buscarPorId(id);

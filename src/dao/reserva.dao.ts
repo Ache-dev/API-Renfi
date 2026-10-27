@@ -147,20 +147,10 @@ export const contarSolapes = async (idFinca: number, entrada: Date, salida: Date
 };
 
 /**
- * Precio por noche de una finca (null si no existe).
+ * Datos de la finca que condicionan una reserva (null si no existe).
  */
-export const precioFinca = async (idFinca: number): Promise<number | null> => {
-    const fila: any = await unwrap(getSupabase().from('Finca').select('Precio').eq('IdFinca', idFinca).maybeSingle());
-    return fila ? Number(fila.Precio) : null;
-};
-
-/**
- * Estado de la finca (null si no existe).
- */
-export const estadoFinca = async (idFinca: number): Promise<string | null> => {
-    const fila: any = await unwrap(getSupabase().from('Finca').select('Estado').eq('IdFinca', idFinca).maybeSingle());
-    return fila ? String(fila.Estado ?? '') : null;
-};
+export const reglasFinca = async (idFinca: number): Promise<{ Precio: number; Estado: string; Capacidad: number; NochesMinimas: number } | null> =>
+    unwrap(getSupabase().from('Finca').select('Precio, Estado, Capacidad, NochesMinimas').eq('IdFinca', idFinca).maybeSingle());
 
 /**
  * Fechas ocupadas de una finca (reservas no canceladas), sin datos personales.
@@ -172,12 +162,4 @@ export const ocupadasPorFinca = async (idFinca: number): Promise<{ IdFinca: numb
     return filas
         .filter(r => !ESTADOS_CANCELADA.includes(String(r.Estado ?? '').toLowerCase()))
         .map(r => ({ IdFinca: r.IdFinca, FechaEntrada: r.FechaEntrada, FechaSalida: r.FechaSalida }));
-};
-
-/**
- * Capacidad de una finca (null si no existe).
- */
-export const capacidadFinca = async (idFinca: number): Promise<number | null> => {
-    const fila: any = await unwrap(getSupabase().from('Finca').select('Capacidad').eq('IdFinca', idFinca).maybeSingle());
-    return fila ? Number(fila.Capacidad) : null;
 };

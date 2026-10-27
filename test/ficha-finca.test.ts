@@ -73,7 +73,7 @@ test('el dueño solo puede poner estados de reserva y de finca válidos', async 
     await assert.rejects(cambiarEstado(1, undefined), /Estado debe ser uno de/);
     const { crearFinca } = await import('../src/services/finca.service');
     const base = { IdMunicipio: 1, NumeroDocumentoUsuario: 1, NombreFinca: 'F', Direccion: 'D' };
-    await assert.rejects(crearFinca({ ...base, Precio: 0, Capacidad: 4 }), /precio/);
-    await assert.rejects(crearFinca({ ...base, Precio: 100, Capacidad: 0 }), /capacidad/);
+    await assert.rejects(crearFinca({ ...base, Precio: 0, Capacidad: 4 }), /Precio/);
+    await assert.rejects(crearFinca({ ...base, Precio: 100, Capacidad: 0 }), /Capacidad/);
     await assert.rejects(crearFinca({ ...base, Precio: 100, Capacidad: 4, Estado: 'Rota' }), /Estado debe ser uno de/);
 });

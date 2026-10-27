@@ -3,6 +3,7 @@ import * as facturaDao from '../dao/factura.dao';
 import { Reserva, ReservaFiltros, CrearReservaDto, ActualizarReservaDto } from '../models/reserva';
 import { Factura } from '../models/factura';
 import { AppError } from '../middlewares/error.middleware';
+import { entero, unoDe, ESTADOS_RESERVA, NOCHES_MAXIMAS, MONTO_MAXIMO } from './validacion';
 
 const normalizeDate = (value: any): Date | null => {
     if (!value) return null;
@@ -45,14 +46,14 @@ export const ESTADOS_RESERVA_DUENO = ['Activa', 'Confirmada', 'Finalizada', 'Can
  * El dueño de la finca (o el administrador) cambia el estado de una reserva: confirmarla, finalizarla o cancelarla.
  */
 export const cambiarEstado = async (id: number, estado: unknown): Promise<Reserva | null> => {
-    const nuevo = ESTADOS_RESERVA_DUENO.find((e) => e.toLowerCase() === String(estado ?? '').trim().toLowerCase());
-    if (!nuevo) throw new AppError(`Estado debe ser uno de: ${ESTADOS_RESERVA_DUENO.join(', ')}`, 400);
-    return await actualizarReserva(id, { Estado: nuevo });
+    return await actualizarReserva(id, { Estado: unoDe('Estado', estado, ESTADOS_RESERVA_DUENO) });
 };
 
+const DIA_MS = 86_400_000;
+
 /**
- * Crea una reserva validando fechas y campos obligatorios.
- * Genera automáticamente la factura asociada si se requiere para flujo completo.
+ * Crea una reserva validando fechas y campos obligatorios, y su factura.
+ * Para un cliente el servidor decide monto, estado y fecha de reserva: lo que envíe se ignora.
  */
 export const crearReserva = async (dto: CrearReservaDto, opciones: { esAdmin?: boolean } = {}): Promise<{
     id: number;
@@ -61,64 +62,62 @@ export const crearReserva = async (dto: CrearReservaDto, opciones: { esAdmin?: b
     IdFactura: number;
     reserva: Reserva | null;
 }> => {
-    if (!dto.IdFinca || !dto.NumeroDocumentoUsuario || !dto.FechaEntrada || !dto.FechaSalida || !dto.MontoReserva) {
-        throw new AppError('Los campos IdFinca, NumeroDocumentoUsuario, FechaEntrada, FechaSalida y MontoReserva son obligatorios', 400);
+    const admin = Boolean(opciones.esAdmin);
+    if (!dto.IdFinca || !dto.NumeroDocumentoUsuario || !dto.FechaEntrada || !dto.FechaSalida || (admin && !dto.MontoReserva)) {
+        throw new AppError(`Los campos IdFinca, NumeroDocumentoUsuario, FechaEntrada, FechaSalida${admin ? ' y MontoReserva' : ''} son obligatorios`, 400);
     }
-    if (!Number.isInteger(Number(dto.IdFinca)) || !Number.isInteger(Number(dto.NumeroDocumentoUsuario)) || !(Number(dto.MontoReserva) > 0)) {
-        throw new AppError('IdFinca, NumeroDocumentoUsuario y MontoReserva deben ser numéricos válidos', 400);
-    }
+    const idFinca = entero('IdFinca', dto.IdFinca, 1, 2_147_483_647);
+    const documento = entero('NumeroDocumentoUsuario', dto.NumeroDocumentoUsuario, 1, 2_147_483_647);
 
     const fechaEntrada = normalizeDate(dto.FechaEntrada);
     const fechaSalida = normalizeDate(dto.FechaSalida);
-
     if (!fechaEntrada || !fechaSalida) {
         throw new AppError('Las fechas de entrada y salida deben ser fechas válidas', 400);
     }
-
     if (fechaSalida <= fechaEntrada) {
         throw new AppError('La fecha de salida debe ser posterior a la fecha de entrada', 400);
     }
+    const noches = Math.max(1, Math.round((fechaSalida.getTime() - fechaEntrada.getTime()) / DIA_MS));
+    if (noches > NOCHES_MAXIMAS) throw new AppError(`Una reserva admite máximo ${NOCHES_MAXIMAS} noches`, 400);
+
+    const finca = await reservaDao.reglasFinca(idFinca);
+    if (!finca) throw new AppError('La finca indicada no existe', 404);
 
     const huespedes = dto.Huespedes ?? dto.huespedes;
     if (huespedes !== undefined && huespedes !== null) {
-        const capacidad = await reservaDao.capacidadFinca(Number(dto.IdFinca));
-        if (!Number.isInteger(Number(huespedes)) || Number(huespedes) < 1) {
-            throw new AppError('El número de huéspedes debe ser al menos 1', 400);
-        }
-        if (capacidad !== null && Number(huespedes) > capacidad) {
-            throw new AppError(`El número de huéspedes (${huespedes}) supera la capacidad de la finca (${capacidad})`, 400);
+        const n = entero('El número de huéspedes', huespedes, 1, 500);
+        if (n > finca.Capacidad) {
+            throw new AppError(`El número de huéspedes (${n}) supera la capacidad de la finca (${finca.Capacidad})`, 400);
         }
     }
 
-    // ponytail: check-then-insert sin lock; con alta concurrencia usar EXCLUDE constraint (btree_gist) en BD
-    if (await reservaDao.contarSolapes(Number(dto.IdFinca), fechaEntrada, fechaSalida) > 0) {
+    let monto: number;
+    if (admin) {
+        monto = entero('MontoReserva', dto.MontoReserva, 1, MONTO_MAXIMO);
+    } else {
+        // Un cliente no decide cuánto paga ni reserva en el pasado; el dueño puede pausar su finca
+        if (fechaEntrada.getTime() < Date.now() - DIA_MS) throw new AppError('La fecha de entrada no puede estar en el pasado', 400);
+        if (noches < finca.NochesMinimas) throw new AppError(`Esta finca exige mínimo ${finca.NochesMinimas} noches`, 400);
+        if (finca.Estado?.trim().toLowerCase() === 'no disponible') {
+            throw new AppError('La finca no está disponible para reservas por ahora', 409);
+        }
+        monto = finca.Precio * noches;
+    }
+
+    // Aviso amable; la garantía real contra reservas simultáneas es la restricción EXCLUDE de la base (migración 004)
+    if (await reservaDao.contarSolapes(idFinca, fechaEntrada, fechaSalida) > 0) {
         throw new AppError('La finca ya tiene una reserva en las fechas seleccionadas', 409);
     }
 
-    // Un cliente no decide cuánto paga: el monto es noches x precio de la finca.
-    let monto = Number(dto.MontoReserva);
-    if (!opciones.esAdmin) {
-        const precio = await reservaDao.precioFinca(Number(dto.IdFinca));
-        if (precio === null) throw new AppError('La finca indicada no existe', 404);
-        // El dueño puede pausar su finca: mientras no esté disponible no recibe reservas
-        if ((await reservaDao.estadoFinca(Number(dto.IdFinca)))?.trim().toLowerCase() === 'no disponible') {
-            throw new AppError('La finca no está disponible para reservas por ahora', 409);
-        }
-        const noches = Math.max(1, Math.round((fechaSalida.getTime() - fechaEntrada.getTime()) / 86_400_000));
-        monto = precio * noches;
-    }
-
-    const reservaParaInsertar: Reserva = {
-        IdFinca: Number(dto.IdFinca),
-        NumeroDocumentoUsuario: dto.NumeroDocumentoUsuario ? Number(dto.NumeroDocumentoUsuario) : undefined,
-        FechaReserva: normalizeDate(dto.FechaReserva) || new Date(),
+    const idReserva = await reservaDao.insertar({
+        IdFinca: idFinca,
+        NumeroDocumentoUsuario: documento,
+        FechaReserva: admin ? normalizeDate(dto.FechaReserva) || new Date() : new Date(),
         FechaEntrada: fechaEntrada,
         FechaSalida: fechaSalida,
         MontoReserva: monto,
-        Estado: opciones.esAdmin ? (dto.Estado || 'Activa') : 'Activa'
-    };
-
-    const idReserva = await reservaDao.insertar(reservaParaInsertar);
+        Estado: admin && dto.Estado ? unoDe('Estado', dto.Estado, ESTADOS_RESERVA) : 'Activa'
+    });
 
     // La factura se crea siempre junto con la reserva; si falla se revierte la reserva.
     let idFactura: number;
@@ -169,13 +168,13 @@ export const actualizarReserva = async (id: number, dto: ActualizarReservaDto): 
 
     const reservaActualizada: Reserva = {
         IdReserva: id,
-        IdFinca: dto.IdFinca !== undefined ? Number(dto.IdFinca) : existente.IdFinca,
-        NumeroDocumentoUsuario: dto.NumeroDocumentoUsuario !== undefined ? Number(dto.NumeroDocumentoUsuario) : existente.NumeroDocumentoUsuario,
+        IdFinca: dto.IdFinca !== undefined ? entero('IdFinca', dto.IdFinca, 1, 2_147_483_647) : existente.IdFinca,
+        NumeroDocumentoUsuario: dto.NumeroDocumentoUsuario !== undefined ? entero('NumeroDocumentoUsuario', dto.NumeroDocumentoUsuario, 1, 2_147_483_647) : existente.NumeroDocumentoUsuario,
         FechaReserva: dto.FechaReserva ? normalizeDate(dto.FechaReserva) || existente.FechaReserva : existente.FechaReserva,
         FechaEntrada: fechaEntrada || new Date(),
         FechaSalida: fechaSalida || new Date(),
-        Estado: dto.Estado || existente.Estado || 'Activa',
-        MontoReserva: dto.MontoReserva !== undefined ? Number(dto.MontoReserva) : existente.MontoReserva
+        Estado: dto.Estado ? unoDe('Estado', dto.Estado, ESTADOS_RESERVA) : existente.Estado || 'Activa',
+        MontoReserva: dto.MontoReserva !== undefined ? entero('MontoReserva', dto.MontoReserva, 1, MONTO_MAXIMO) : existente.MontoReserva
     };
 
     await reservaDao.actualizar(reservaActualizada);

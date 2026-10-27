@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import envConfig from './config/env.config';
-import { errorHandler } from './middlewares/error.middleware';
+import { errorHandler, soloValoresPlanos } from './middlewares/error.middleware';
 
 // Importación de rutas
 import usuarioRouter from './routes/usuario.route';
@@ -23,8 +23,9 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: false, limit: '100kb' }));
+app.use(soloValoresPlanos);
 
 // Middleware simple de auditoría/logging de peticiones en consola
 app.use((req, _res, next) => {

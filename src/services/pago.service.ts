@@ -2,6 +2,7 @@ import * as pagoDao from '../dao/pago.dao';
 import * as facturaDao from '../dao/factura.dao';
 import { Pago, CrearPagoDto, ActualizarPagoDto, PagoPendiente } from '../models/pago';
 import { AppError } from '../middlewares/error.middleware';
+import { entero, unoDe, ESTADOS_PAGO, MONTO_MAXIMO } from './validacion';
 
 /**
  * Obtiene todos los pagos registrados.
@@ -33,13 +34,15 @@ export const crearPago = async (dto: CrearPagoDto, quien: { esAdmin: boolean; do
     idPago: number;
     pago: Pago | null;
 }> => {
-    if (!dto.IdFactura || !dto.IdMetodoDePago || !dto.Monto) {
-        throw new AppError('Los campos IdFactura, IdMetodoDePago y Monto son obligatorios', 400);
+    if (!dto.IdFactura || !dto.IdMetodoDePago || (quien.esAdmin && !dto.Monto)) {
+        throw new AppError(`Los campos IdFactura, IdMetodoDePago${quien.esAdmin ? ' y Monto' : ''} son obligatorios`, 400);
     }
 
-    let monto = Number(dto.Monto);
-    let estado = dto.EstadoPago || 'Pagado';
+    // El monto del cliente se ignora: paga el total facturado
+    let monto = quien.esAdmin ? entero('Monto', dto.Monto, 1, MONTO_MAXIMO) : 0;
+    let estado = dto.EstadoPago ? unoDe('EstadoPago', dto.EstadoPago, ESTADOS_PAGO) : 'Pagado';
     let fechaPago = dto.FechaPago ? new Date(dto.FechaPago) : new Date();
+    if (isNaN(fechaPago.getTime())) throw new AppError('FechaPago no es una fecha válida', 400);
     if (!quien.esAdmin) {
         // Un cliente solo paga sus propias facturas, por el total facturado y con la fecha del servidor.
         const factura = await facturaDao.buscarPorId(Number(dto.IdFactura));
@@ -53,8 +56,8 @@ export const crearPago = async (dto: CrearPagoDto, quien: { esAdmin: boolean; do
     }
 
     const pago: Pago = {
-        IdFactura: Number(dto.IdFactura),
-        IdMetodoDePago: Number(dto.IdMetodoDePago),
+        IdFactura: entero('IdFactura', dto.IdFactura, 1, 2_147_483_647),
+        IdMetodoDePago: entero('IdMetodoDePago', dto.IdMetodoDePago, 1, 2_147_483_647),
         Monto: monto,
         FechaPago: fechaPago,
         EstadoPago: estado
@@ -84,9 +87,9 @@ export const actualizarPago = async (id: number, dto: ActualizarPagoDto): Promis
         IdPago: id,
         IdFactura: dto.IdFactura !== undefined ? Number(dto.IdFactura) : existente.IdFactura,
         IdMetodoDePago: dto.IdMetodoDePago !== undefined ? Number(dto.IdMetodoDePago) : existente.IdMetodoDePago,
-        Monto: dto.Monto !== undefined ? Number(dto.Monto) : existente.Monto,
+        Monto: dto.Monto !== undefined ? entero('Monto', dto.Monto, 1, MONTO_MAXIMO) : existente.Monto,
         FechaPago: dto.FechaPago ? new Date(dto.FechaPago) : existente.FechaPago,
-        EstadoPago: dto.EstadoPago || existente.EstadoPago
+        EstadoPago: dto.EstadoPago ? unoDe('EstadoPago', dto.EstadoPago, ESTADOS_PAGO) : existente.EstadoPago
     };
 
     await pagoDao.actualizar(pagoActualizado);
