@@ -1,6 +1,6 @@
 # 🌿 API Renfi — Backend RESTful
 
-Backend RESTful para la plataforma **Renfi**, una solución integral para la gestión y reserva de fincas vacacionales y turísticas. Esta API alimenta tanto la aplicación pública de usuarios como el panel de administración en Angular ([Renfi Frontend](https://github.com/Ache-dev/Renfi)).
+Backend RESTful para la plataforma **Renfi**, una solución integral para la gestión y reserva de fincas vacacionales y turísticas. Esta API alimenta la web en Angular ([Renfi](https://github.com/Ache-dev/Renfi)) y la app móvil en Expo ([Renfi-ExpoGO](https://github.com/Resx1983/Renfi-ExpoGO)): catálogo público, reservas y pagos de clientes, panel "Mi finca" de los dueños y panel de administración.
 
 Desarrollado con **Node.js**, **Express 5**, **TypeScript** y **PostgreSQL / Supabase**.
 
@@ -116,7 +116,7 @@ La URL base predeterminada es `http://localhost:3000/api`.
 | `POST` | `/api/usuario/login` | Inicia sesión con credenciales | `{ "correo": "admin@renfi.com", "contrasena": "123456" }` |
 | `GET` | `/api/usuario` | Lista todos los usuarios | Ninguno |
 | `GET` | `/api/usuario/:id` | Obtiene un usuario por su ID | Ninguno |
-| `POST` | `/api/usuario` | Registra un nuevo usuario | `{ "NombreUsuario": "...", "ApellidoUsuario": "...", "Correo": "...", "Contrasena": "...", "Telefono": "...", "IdRol": 2 }` |
+| `POST` | `/api/usuario` | Registra un usuario (público: cliente, o dueño con `TipoCuenta`) | `{ "NombreUsuario": "...", "ApellidoUsuario": "...", "Correo": "...", "Contrasena": "...", "Telefono": "...", "TipoCuenta": "cliente" \| "dueno" }` (`IdRol` solo lo respeta el administrador) |
 | `PUT` | `/api/usuario/:id` | Actualiza un usuario (parcial o total) | `{ "NombreUsuario": "...", "Telefono": "..." }` |
 | `DELETE`| `/api/usuario/:id` | Elimina un usuario por ID | Ninguno |
 | `DELETE`| `/api/usuario/delete?id=:id` | Elimina un usuario por query param | Ninguno |
@@ -124,11 +124,13 @@ La URL base predeterminada es `http://localhost:3000/api`.
 ### 2. Fincas (`/api/finca`)
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/finca` | Lista todas las fincas disponibles |
+| `GET` | `/api/finca` | Catálogo público de fincas (con `Imagenes` y `UrlPortada`) |
+| `GET` | `/api/finca/mias` | Fincas del dueño autenticado (o todas, si es administrador) |
 | `GET` | `/api/finca/:id` | Obtiene detalle completo de una finca |
-| `POST` | `/api/finca` | Registra una nueva finca |
-| `PUT` | `/api/finca/:id` | Actualiza los datos de una finca |
-| `DELETE`| `/api/finca/:id` | Elimina una finca |
+| `POST` | `/api/finca` | Publica una finca (dueño o administrador; el dueño siempre a su nombre) |
+| `POST` | `/api/finca/:id/imagenes` | Sube una foto a la galería (multipart, campo `imagen`) |
+| `PUT` | `/api/finca/:id` | Actualiza una finca (administrador o su dueño) |
+| `DELETE`| `/api/finca/:id` | Elimina una finca (administrador o su dueño) |
 | `DELETE`| `/api/finca/delete?id=:id` | Elimina una finca por query param |
 | `GET` | `/api/finca/report/mas-reservadas` | Reporte: Fincas con más reservas |
 | `GET` | `/api/finca/report/promedio-calificacion` | Reporte: Promedio de calificación |
@@ -138,17 +140,21 @@ La URL base predeterminada es `http://localhost:3000/api`.
 ### 3. Reservas (`/api/reserva`)
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/reserva` | Lista reservas (soporta `?Correo=`, `?NumeroDocumento=`, `?IdFinca=`) |
+| `GET` | `/api/reserva` | Lista reservas (administrador; soporta `?Correo=`, `?NumeroDocumento=`, `?IdFinca=`, `?Estado=`) |
+| `GET` | `/api/reserva/mis-fincas` | Reservas recibidas por las fincas del dueño |
+| `GET` | `/api/reserva/finca/:id/ocupadas` | Fechas ocupadas de una finca (público, sin datos personales) |
+| `PUT` | `/api/reserva/:id/estado` | El dueño o el administrador confirma, finaliza o cancela |
 | `GET` | `/api/reserva/:id` | Obtiene una reserva por ID |
 | `GET` | `/api/reserva/usuario/:numeroDocumento` | Lista reservas de un usuario específico |
-| `POST` | `/api/reserva` | Crea una reserva y genera factura automática inicial |
+| `POST` | `/api/reserva` | Crea una reserva a nombre del cliente autenticado y su factura (el monto lo calcula la API) |
 | `PUT` | `/api/reserva/:id` | Actualiza estado o fechas de una reserva |
 | `DELETE`| `/api/reserva/:id` | Cancela/elimina una reserva |
 
 ### 4. Pagos (`/api/pago`)
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/pago` | Lista todos los pagos |
+| `GET` | `/api/pago` | Lista todos los pagos (administrador) |
+| `GET` | `/api/pago/mis-fincas` | Pagos recibidos por las fincas del dueño |
 | `GET` | `/api/pago/:id` | Obtiene un pago por ID |
 | `POST` | `/api/pago` | Registra un pago y retorna `IdPago` |
 | `PUT` | `/api/pago/:id` | Actualiza estado de un pago |
@@ -189,9 +195,10 @@ La URL base predeterminada es `http://localhost:3000/api`.
 | `GET` | `/api/imagen` | Lista todas las imágenes |
 | `GET` | `/api/imagen/:id` | Obtiene imagen por ID |
 | `GET` | `/api/imagen/finca/:id` | Obtiene todas las imágenes de una finca |
-| `POST` | `/api/imagen` | Asocia una imagen a una finca |
-| `PUT` | `/api/imagen/:id` | Actualiza URL de una imagen |
-| `DELETE`| `/api/imagen/:id` | Elimina una imagen |
+| `PUT` | `/api/imagen/:id` | Cambia portada, orden o texto alternativo (administrador o dueño de la finca) |
+| `DELETE`| `/api/imagen/:id` | Elimina una imagen y su archivo (administrador o dueño de la finca) |
+
+Las imágenes se crean subiendo el archivo con `POST /api/finca/:id/imagenes`.
 
 ### 9. Roles (`/api/rol`)
 | Método | Ruta | Descripción |
@@ -241,8 +248,7 @@ El proyecto está 100% preparado y optimizado para ejecutarse sobre **Supabase**
    - Las **9 tablas** del dominio con tipos PostgreSQL nativos e identidades autoincrementables.
    - Las **claves foráneas** y reglas de integridad referencial (`CASCADE` / `SET NULL`).
    - Los **10 índices** de optimización para búsquedas y consultas frecuentes.
-   - Las **36 funciones PL/pgSQL** (compatibles con Supabase RPC `supabase.rpc()` y queries SQL directas).
-   - Los **datos semilla iniciales** (roles de Administrador, Cliente y Propietario, municipios, métodos de pago y usuario admin).
+   - Los **datos semilla iniciales** (roles, municipios, métodos de pago y usuario admin).
    - Políticas de seguridad **RLS (Row Level Security)** abiertas para los roles de API.
 
 ### Paso 2: Conectar la API a Supabase
@@ -250,7 +256,7 @@ El proyecto está 100% preparado y optimizado para ejecutarse sobre **Supabase**
 2. Copia la **Project URL** en `SUPABASE_URL` y una API key en `SUPABASE_KEY` de tu archivo `.env` (también se aceptan `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`).
 3. Inicia la API: `npm start` (desarrollo) o `npm run build && npm run serve`. Si falta la configuración, la API falla al arrancar con un mensaje claro.
 
-> La API accede a las **tablas** vía PostgREST (`supabase.from(...)`); no depende de las funciones `SP_*`.
+> La API accede a las **tablas** vía PostgREST (`supabase.from(...)`). Las funciones `SP_*` heredadas se eliminan en la migración 004.
 > Las pruebas (`npm test`) solo hacen lecturas contra el Supabase configurado.
 
 ---
@@ -284,16 +290,25 @@ La API es la **única puerta de entrada** a la base de datos: las apps (Expo, An
 | Recurso | Anónimo | Cliente | Administrador |
 |---|---|---|---|
 | `GET` fincas, imágenes, municipios, fechas ocupadas de una finca | Sí | Sí | Sí |
-| `POST /usuario` (registro) | Sí (siempre crea Cliente) | — | Puede elegir rol y estado |
+| `POST /usuario` (registro) | Sí (Cliente, o Dueño con `TipoCuenta: "dueno"`; nunca Administrador) | — | Puede elegir rol y estado |
 | `GET/PUT /usuario/:id` | No | Solo el propio (sin cambiar rol, estado ni correo) | Cualquiera |
 | `GET /metododepago` | No | Sí | Sí |
 | `POST /reserva`, `POST /pago` | No | A su nombre; el monto lo calcula la API | Cualquiera |
-| `GET /reserva/usuario/:doc`, `GET /reserva|factura|pago/:id` | No | Solo lo propio | Todo |
+| `GET /reserva/usuario/:doc`, `GET /reserva|factura|pago/:id` | No | Solo lo propio (el dueño, las reservas de sus fincas) | Todo |
 | `PUT /reserva/:id` | No | Solo cancelar la propia | Todo |
-| Subir, editar y borrar imágenes de fincas | No | No | Sí |
+| Publicar finca, editar/eliminar y gestionar su galería | No | No | Sí (cualquiera) |
+| Ídem, solo en **sus** fincas; ver sus reservas y pagos; cambiar estado de sus reservas | No | No | Dueño de finca |
 | Listados completos, reportes, roles, y escritura de catálogos | No | No | Sí |
 
 Para cerrar una base Supabase ya creada ejecuta [`db/seguridad.sql`](db/seguridad.sql) (después de desplegar la API con la clave secret).
+
+---
+
+## 🛡️ Validación e integridad
+
+- Cuerpo JSON limitado a 100 kb; se rechazan objetos anidados y tipos o rangos inválidos (`src/services/validacion.ts`, con los mismos límites que la migración 004).
+- **Reservas y pagos:** el servidor calcula el monto (noches × precio); sin fechas pasadas, con noches mínimas (de la finca) y máximas.
+- Errores de la base `23514`, `23P01` y `22001` se traducen a `400`/`409`. Si la base no responde, la API contesta `503` (ya no hay catálogo demo en memoria).
 
 ---
 
@@ -305,11 +320,13 @@ Las fotos se alojan en **Supabase Storage** (bucket público `fincas-imagenes`);
 1. Ejecuta [`db/migraciones/001_imagenes_y_ficha_finca.sql`](db/migraciones/001_imagenes_y_ficha_finca.sql) en el SQL Editor de Supabase (crea el bucket, las columnas de `Imagen` y la ficha de `Finca`; es idempotente).
 2. Despliega esta versión de la API. **Si la API corre antes de la migración, los endpoints de fincas e imágenes responden 500** porque piden columnas que aún no existen.
 3. Ejecuta [`db/migraciones/002_eliminar_url_imagen.sql`](db/migraciones/002_eliminar_url_imagen.sql): elimina la columna `Imagen."UrlImagen"` (todas las imágenes viven en Storage). Se detiene sin cambiar nada si alguna imagen aún no tiene `RutaStorage`.
-4. Ejecuta [`db/seguridad.sql`](db/seguridad.sql) cuando la API ya use la clave secret.
+4. Ejecuta [`db/migraciones/003_rol_dueno_de_finca.sql`](db/migraciones/003_rol_dueno_de_finca.sql) (rol Dueño de finca; antes de desplegar la API que lo usa).
+5. Despliega la API y ejecuta [`db/migraciones/004_restricciones_y_endurecimiento.sql`](db/migraciones/004_restricciones_y_endurecimiento.sql): restricciones `CHECK`, correo y factura únicos, `EXCLUDE` contra reservas solapadas, trigger contra pagos que excedan la factura, solo contraseñas bcrypt, y elimina las funciones `SP_*`.
+6. Ejecuta [`db/seguridad.sql`](db/seguridad.sql) cuando la API ya use la clave secret.
 
-Una base **nueva** se arma con `supabase_schema.sql` y luego las migraciones de `db/migraciones/` en orden (001, 002...).
+Una base **nueva** se arma con `supabase_schema.sql` y luego las migraciones de `db/migraciones/` en orden (001 a 004).
 
-**Subir una imagen** (solo administrador): `POST /api/finca/:id/imagenes`, `multipart/form-data`, campo `imagen` (+ opcionales `TextoAlternativo`, `EsPortada=true`).
+**Subir una imagen** (administrador o dueño de la finca): `POST /api/finca/:id/imagenes`, `multipart/form-data`, campo `imagen` (+ opcionales `TextoAlternativo`, `EsPortada=true`).
 - Máximo 5 MB y 10 imágenes por finca. Acepta JPG, PNG y WebP, validados por su **contenido** (no por el nombre).
 - La API corrige la orientación, elimina los metadatos (EXIF/GPS), reduce a 1600 px y convierte a **WebP** antes de guardar en `finca-{id}/{uuid}.webp`.
 - La primera imagen de una finca queda como **portada**. `PUT /api/imagen/:id` cambia portada, orden o texto alternativo; `DELETE /api/imagen/:id` borra la fila y el archivo (y la siguiente imagen pasa a ser portada). Las imágenes solo se crean subiendo el archivo (ya no existen las URL externas).
