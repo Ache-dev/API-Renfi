@@ -2,7 +2,7 @@
 
 Backend RESTful para la plataforma **Renfi**, una solución integral para la gestión y reserva de fincas vacacionales y turísticas. Esta API alimenta la web en Angular ([Renfi](https://github.com/Ache-dev/Renfi)) y la app móvil en Expo ([Renfi-ExpoGO](https://github.com/Resx1983/Renfi-ExpoGO)): catálogo público, reservas y pagos de clientes, panel "Mi finca" de los dueños y panel de administración.
 
-Desarrollado con **Node.js**, **Express 5**, **TypeScript** y **PostgreSQL / Supabase**.
+Desarrollado con **Node.js**, **Express 5**, **TypeScript** y **PostgreSQL** sobre **Azure** (Azure Database for PostgreSQL + Azure Blob Storage).
 
 ---
 
@@ -14,14 +14,16 @@ El proyecto sigue una arquitectura en capas desacopladas (**Layered Architecture
 API-Renfi/
 ├── .env                       # Variables de entorno locales
 ├── .env.example               # Plantilla de variables de entorno
-├── supabase_schema.sql        # Esquema completo DDL, PL/pgSQL y Seed Data para Supabase
+├── db/azure/                  # Esquema (tablas, triggers, procedimientos sp_*), seed demo y guía de migración
+├── scripts/migrar-storage.sh  # Copia de imágenes hacia Azure Blob (azcopy)
 ├── package.json               # Dependencias y scripts de ejecución
 ├── tsconfig.json              # Configuración de TypeScript
 ├── src/
 │   ├── config/                # Configuración global y variables de entorno tipadas
 │   │   └── env.config.ts
-│   ├── conexion/              # Conectividad a Supabase
-│   │   └── supabase.ts        # Cliente supabase-js (singleton) y helpers unwrap()/contar()
+│   ├── conexion/              # Conectividad a Azure
+│   │   ├── postgres.ts        # Pool de pg (singleton) y helpers que llaman a los sp_*
+│   │   └── storage.ts         # Azure Blob Storage (subir, borrar, URL pública)
 │   ├── models/                # Entidades del dominio, DTOs y tipos
 │   │   ├── usuario.ts         # Usuario, DTOs y UsuarioNormalizado
 │   │   ├── finca.ts           # Finca, DTOs y Reportes
@@ -91,7 +93,7 @@ API-Renfi/
 
 1. **Alineación con el Frontend Renfi (Angular)**:
    - **Formato Normalizado de Usuario**: Se retorna tanto `IdUsuario` como `NumeroDocumento`, y `Rol` como `NombreRol`, permitiendo compatibilidad directa con `AuthService`, `AuthStateService` y el módulo administrativo.
-   - **Retorno de Identificadores Creados**: En todas las operaciones de creación (`POST /api/reserva`, `POST /api/factura`, `POST /api/pago`, `POST /api/finca`, `POST /api/usuario`, etc.), la API captura `SCOPE_IDENTITY()` y retorna explícitamente los IDs (`IdReserva`, `idReserva`, `id`, `IdFactura`, `IdPago`, etc.), evitando errores de resolución en el frontend.
+   - **Retorno de Identificadores Creados**: En todas las operaciones de creación (`POST /api/reserva`, `POST /api/factura`, `POST /api/pago`, `POST /api/finca`, `POST /api/usuario`, etc.), el procedimiento almacenado devuelve el Id con `INSERT ... RETURNING` y la API lo retorna explícitamente los IDs (`IdReserva`, `idReserva`, `id`, `IdFactura`, `IdPago`, etc.), evitando errores de resolución en el frontend.
    - **Filtros Dinámicos en Reservas**: `GET /api/reserva` ahora procesa parámetros de consulta (`?Correo=&NumeroDocumento=&IdFinca=&Estado=`), tal como lo requiere `ReservaService.listarReservas`.
    - **Compatibilidad con Panel de Administración**: Se soporta la eliminación tanto por parámetro de ruta (`DELETE /:id`) como por parámetro de consulta (`DELETE /delete?id=:id`), utilizado por `admin-resources.config.ts`.
    - **Consulta Enriquecida de Fincas e Imágenes**: `GET /api/finca/:id` ahora retorna los datos completos del propietario (`NombrePropietario`, `ApellidoPropietario`, `TelefonoPropietario`, `CorreoPropietario`), y `GET /api/imagen/finca/:id` responde sin bloqueos ni requerimientos circulares.
@@ -99,7 +101,7 @@ API-Renfi/
 
 2. **Calidad de Código y Arquitectura**:
    - **Capa de Servicios**: Se separó la lógica de negocio y las validaciones de las capas de transporte (controladores) y persistencia (DAOs).
-   - **Cliente Supabase Singleton**: la API consume la base de datos por HTTPS (PostgREST) con `@supabase/supabase-js`; no mantiene conexiones abiertas.
+   - **Acceso a datos solo por procedimientos almacenados**: los DAO no contienen SQL; llaman a funciones `sp_*` con parámetros (`pg`, Pool singleton). La base se protege con restricciones y triggers.
    - **Manejo Centralizado de Errores**: Middleware global que captura errores síncronos y asíncronos, retornando siempre un payload JSON estructurado `{ success: false, message: ... }`.
    - **Variables de Entorno Tipadas**: Soporte para `.env` a través de `dotenv` con valores por defecto seguros para desarrollo.
    - **Autenticación JWT**: Emisión y validación opcional/obligatoria de JSON Web Tokens con firma segura.
@@ -220,10 +222,14 @@ Copia el archivo `.env.example` como `.env` y configura los valores correspondie
 PORT=3000
 NODE_ENV=development
 
-# Supabase (Project Settings -> API)
-SUPABASE_URL=https://<project-ref>.supabase.co
-# Clave secret (sb_secret_...) del backend; nunca en una app
-SUPABASE_KEY=
+# Azure Database for PostgreSQL (rol renfi_app: solo ejecuta los sp_*)
+DATABASE_URL=postgresql://renfi_app:<contraseña>@<servidor>.postgres.database.azure.com:5432/renfi
+
+# Azure Blob Storage (contenedor público de imágenes)
+AZURE_STORAGE_ACCOUNT_URL=https://<cuenta>.blob.core.windows.net
+AZURE_STORAGE_CONTAINER=fincas-imagenes
+# Solo desarrollo; en Azure se usa identidad administrada
+AZURE_STORAGE_CONNECTION_STRING=
 
 # Seguridad JWT (obligatorio, mínimo 32 caracteres)
 JWT_SECRET=
@@ -235,35 +241,33 @@ CORS_ORIGIN=*
 
 ---
 
-## ⚡ Alojamiento y Despliegue en Supabase
+## ☁️ Despliegue en Azure
 
-El proyecto está 100% preparado y optimizado para ejecutarse sobre **Supabase** (PostgreSQL):
+La API arranca con `npm start` (desarrollo) o `npm run build && npm run serve`. Si falta `DATABASE_URL` o la configuración de Blob, o la base no responde, **falla al arrancar con un mensaje claro**.
 
-### Paso 1: Cargar el Esquema en Supabase
-1. Ingresa a tu panel en [Supabase Dashboard](https://supabase.com/dashboard) y abre tu proyecto.
-2. Ve a la sección **SQL Editor** en la barra lateral izquierda.
-3. Abre el archivo [`supabase_schema.sql`](file:///c:/Users/aprocurement/Documents/GitHub/API-Renfi/supabase_schema.sql) generado en este repositorio.
-4. Copia y pega todo su contenido en una nueva consulta del SQL Editor y presiona **Run**.
-5. Esto creará automáticamente:
-   - Las **9 tablas** del dominio con tipos PostgreSQL nativos e identidades autoincrementables.
-   - Las **claves foráneas** y reglas de integridad referencial (`CASCADE` / `SET NULL`).
-   - Los **10 índices** de optimización para búsquedas y consultas frecuentes.
-   - Los **datos semilla iniciales** (roles, municipios, métodos de pago y usuario admin).
-   - Políticas de seguridad **RLS (Row Level Security)** abiertas para los roles de API.
+### Paso 1: Base de datos (Azure Database for PostgreSQL Flexible Server)
+1. En *Server parameters* → `azure.extensions`, habilita `BTREE_GIST`.
+2. Crea una base `renfi` y el rol de la API: `CREATE ROLE renfi_app LOGIN PASSWORD '<larga>';`
+3. Ejecuta [`db/azure/schema.sql`](db/azure/schema.sql) como administrador. Crea:
+   - Las **9 tablas** del dominio, claves foráneas (`CASCADE` / `SET NULL`) e índices.
+   - Restricciones `CHECK`, unicidad (correo, una factura por reserva, una portada por finca) y `EXCLUDE` contra reservas solapadas.
+   - **Triggers**: un pago no puede exceder el total de su factura; el correo se normaliza a minúsculas.
+   - **Procedimientos almacenados `sp_*`** (única vía de acceso de la API) y las vistas internas que usan.
+   - Los **datos semilla** (roles, municipios, métodos de pago y administrador `admin@renfi.com` / `admin123`: cámbiala al instalar).
+   - Permisos: `renfi_app` solo tiene `EXECUTE` sobre los `sp_*`; no puede leer ni escribir tablas.
+4. Datos de ejemplo para desarrollo (opcional, **nunca en producción**): [`db/azure/seed_demo.sql`](db/azure/seed_demo.sql).
+5. Para traer los datos de una base anterior: [`db/azure/migrar_datos.md`](db/azure/migrar_datos.md).
 
-### Paso 2: Conectar la API a Supabase
-1. En tu proyecto de Supabase, ve a **Project Settings** -> **API**.
-2. Copia la **Project URL** en `SUPABASE_URL` y una API key en `SUPABASE_KEY` de tu archivo `.env` (también se aceptan `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`).
-3. Inicia la API: `npm start` (desarrollo) o `npm run build && npm run serve`. Si falta la configuración, la API falla al arrancar con un mensaje claro.
+### Paso 2: Blob Storage
+Crea el contenedor `fincas-imagenes` con acceso público de lectura a blobs (la cuenta debe permitir acceso anónimo). En Azure, asigna a la identidad de la API el rol *Storage Blob Data Contributor*. Para copiar las imágenes existentes: [`scripts/migrar-storage.sh`](scripts/migrar-storage.sh).
 
-> La API accede a las **tablas** vía PostgREST (`supabase.from(...)`). Las funciones `SP_*` heredadas se eliminan en la migración 004.
-> Las pruebas (`npm test`) solo hacen lecturas contra el Supabase configurado.
+> Las pruebas (`npm test`) leen la base configurada en `DATABASE_URL` y no escriben datos; las que tocan imágenes usan Blob Storage simulado.
 
 ---
 
 ## 🏡 Rol "Dueño de finca"
 
-Aplica `db/migraciones/003_rol_dueno_de_finca.sql` (crea o renombra el rol; la API lo reconoce por nombre). Un dueño puede:
+El rol `Dueño de finca` viene en el esquema (la API lo reconoce por nombre). Un dueño puede:
 
 | Acción | Endpoint |
 |---|---|
@@ -279,9 +283,9 @@ No puede traspasar fincas, cambiar la calificación ni tocar datos de otros. Una
 
 ## 🔐 Seguridad y permisos
 
-La API es la **única puerta de entrada** a la base de datos: las apps (Expo, Angular) nunca hablan con Supabase directamente.
+La API es la **única puerta de entrada** a la base de datos: las apps (Expo, Angular) nunca hablan con la base ni con Blob Storage directamente.
 
-- **Clave de Supabase:** usa la clave **secret** (`sb_secret_...`) en `SUPABASE_KEY`. Nunca la pongas en una app ni en git.
+- **Credenciales de Azure:** `DATABASE_URL` usa el rol `renfi_app` (solo `EXECUTE` sobre `sp_*`). Nunca la pongas en una app ni en git; en Blob usa identidad administrada.
 - **Sesión:** `POST /api/usuario/login` devuelve un JWT (`JWT_SECRET` es obligatorio, mínimo 32 caracteres; dura `JWT_EXPIRES_IN`, por defecto 1 día). Se envía como `Authorization: Bearer <token>`.
 - **Contraseñas:** se guardan con bcrypt. Los clientes pueden enviarlas en claro o como SHA-512; las contraseñas antiguas (texto plano o SHA-512) se migran a bcrypt en el primer inicio de sesión correcto.
 - **Cancelar un token:** en cada petición la API consulta al usuario en la base. Un token deja de valer al instante si el usuario se desactiva (`Estado` distinto de `Activo`), se elimina, o cambia su contraseña; el rol que se aplica es siempre el actual, no el del token. Un cliente cierra sesión descartando su token.
@@ -300,13 +304,13 @@ La API es la **única puerta de entrada** a la base de datos: las apps (Expo, An
 | Ídem, solo en **sus** fincas; ver sus reservas y pagos; cambiar estado de sus reservas | No | No | Dueño de finca |
 | Listados completos, reportes, roles, y escritura de catálogos | No | No | Sí |
 
-Para cerrar una base Supabase ya creada ejecuta [`db/seguridad.sql`](db/seguridad.sql) (después de desplegar la API con la clave secret).
+El control de acceso por rol y por propietario lo hace la capa de servicios con el JWT; la base solo ve a `renfi_app`.
 
 ---
 
 ## 🛡️ Validación e integridad
 
-- Cuerpo JSON limitado a 100 kb; se rechazan objetos anidados y tipos o rangos inválidos (`src/services/validacion.ts`, con los mismos límites que la migración 004).
+- Cuerpo JSON limitado a 100 kb; se rechazan objetos anidados y tipos o rangos inválidos (`src/services/validacion.ts`, con los mismos límites que las restricciones de `db/azure/schema.sql`).
 - **Reservas y pagos:** el servidor calcula el monto (noches × precio); sin fechas pasadas, con noches mínimas (de la finca) y máximas.
 - Errores de la base `23514`, `23P01` y `22001` se traducen a `400`/`409`. Si la base no responde, la API contesta `503` (ya no hay catálogo demo en memoria).
 
@@ -314,17 +318,7 @@ Para cerrar una base Supabase ya creada ejecuta [`db/seguridad.sql`](db/segurida
 
 ## 🖼️ Imágenes y ficha de las fincas
 
-Las fotos se alojan en **Supabase Storage** (bucket público `fincas-imagenes`); la base de datos guarda solo la ruta y los metadatos.
-
-**Orden de despliegue (importante):**
-1. Ejecuta [`db/migraciones/001_imagenes_y_ficha_finca.sql`](db/migraciones/001_imagenes_y_ficha_finca.sql) en el SQL Editor de Supabase (crea el bucket, las columnas de `Imagen` y la ficha de `Finca`; es idempotente).
-2. Despliega esta versión de la API. **Si la API corre antes de la migración, los endpoints de fincas e imágenes responden 500** porque piden columnas que aún no existen.
-3. Ejecuta [`db/migraciones/002_eliminar_url_imagen.sql`](db/migraciones/002_eliminar_url_imagen.sql): elimina la columna `Imagen."UrlImagen"` (todas las imágenes viven en Storage). Se detiene sin cambiar nada si alguna imagen aún no tiene `RutaStorage`.
-4. Ejecuta [`db/migraciones/003_rol_dueno_de_finca.sql`](db/migraciones/003_rol_dueno_de_finca.sql) (rol Dueño de finca; antes de desplegar la API que lo usa).
-5. Despliega la API y ejecuta [`db/migraciones/004_restricciones_y_endurecimiento.sql`](db/migraciones/004_restricciones_y_endurecimiento.sql): restricciones `CHECK`, correo y factura únicos, `EXCLUDE` contra reservas solapadas, trigger contra pagos que excedan la factura, solo contraseñas bcrypt, y elimina las funciones `SP_*`.
-6. Ejecuta [`db/seguridad.sql`](db/seguridad.sql) cuando la API ya use la clave secret.
-
-Una base **nueva** se arma con `supabase_schema.sql` y luego las migraciones de `db/migraciones/` en orden (001 a 004).
+Las fotos se alojan en **Azure Blob Storage** (contenedor público `fincas-imagenes`); la base de datos guarda solo la ruta relativa (`RutaStorage`) y los metadatos. La URL pública se arma con `AZURE_STORAGE_ACCOUNT_URL` + contenedor + ruta.
 
 **Subir una imagen** (administrador o dueño de la finca): `POST /api/finca/:id/imagenes`, `multipart/form-data`, campo `imagen` (+ opcionales `TextoAlternativo`, `EsPortada=true`).
 - Máximo 5 MB y 10 imágenes por finca. Acepta JPG, PNG y WebP, validados por su **contenido** (no por el nombre).

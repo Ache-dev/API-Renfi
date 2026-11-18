@@ -21,7 +21,7 @@ Tecnologías principales:
 | **Node.js** | Permite ejecutar JavaScript fuera del navegador (en el servidor). |
 | **TypeScript** | JavaScript con “tipos”: ayuda a evitar errores escribiendo qué forma tienen los datos. |
 | **Express 5** | Librería que facilita crear las “rutas” (URLs) de la API. |
-| **PostgreSQL / Supabase** | La base de datos donde se guardan todos los datos. |
+| **PostgreSQL (Azure)** | La base de datos donde se guardan todos los datos (Azure Database for PostgreSQL). |
 
 ---
 
@@ -37,12 +37,14 @@ API-Renfi/
 │   ├── routes/           ← 3. Las URLs que existen (ej: /api/finca)
 │   ├── controllers/      ← 4. Recibe la petición y devuelve la respuesta
 │   ├── services/         ← 5. Reglas del negocio (la “lógica”)
-│   ├── dao/              ← 6. Habla con la base de datos (consultas SQL)
+│   ├── dao/              ← 6. Habla con la base de datos (llama a procedimientos almacenados)
 │   ├── models/           ← 7. Describe la forma de los datos (Usuario, Finca…)
 │   └── middlewares/      ← Filtros que se ejecutan antes o después (errores, IDs, login)
 ├── db/
-│   └── seed.sql          ← Datos de ejemplo para empezar (fincas, usuarios, roles…)
-├── supabase_schema.sql   ← “Plano” de la base de datos: tablas, relaciones y funciones
+│   └── azure/
+│       ├── schema.sql        ← “Plano” de la base de datos: tablas, triggers y procedimientos sp_*
+│       ├── seed_demo.sql     ← Datos de ejemplo solo para desarrollo
+│       └── migrar_datos.md   ← Cómo traer los datos de una base anterior
 ├── test/                 ← Pruebas automáticas
 ├── .env                  ← Tus configuraciones privadas (NO se sube a git)
 ├── .env.example          ← Plantilla del .env, sin datos sensibles
@@ -127,43 +129,44 @@ Esta es la parte que más confunde al principio, así que la explicamos con calm
 
 ### 5.1. La base de datos es PostgreSQL
 
-La base de datos es **PostgreSQL**, un sistema de bases de datos muy conocido. El proyecto está pensado para usarla alojada en **Supabase**, que es un servicio en la nube que te da un PostgreSQL listo para usar (sin instalar nada en tu computador).
-
-La API se conecta a Supabase por **HTTPS** usando la librería `@supabase/supabase-js` (que habla con PostgREST, la API REST que Supabase genera para cada tabla). Solo necesita dos variables en el `.env`:
+La base de datos es **PostgreSQL**, alojada en **Azure Database for PostgreSQL**. Las imágenes de las fincas viven en **Azure Blob Storage**. La API se conecta con la librería `pg` y necesita estas variables en el `.env`:
 
 | Variable | ¿Qué es? |
 |---|---|
-| `SUPABASE_URL` | La URL de tu proyecto (`https://<ref>.supabase.co`). |
-| `SUPABASE_KEY` | Una API key: la *publishable* o, mejor en el backend, la *secret*. |
+| `DATABASE_URL` | Cadena de conexión del rol `renfi_app` (solo puede ejecutar procedimientos). |
+| `AZURE_STORAGE_ACCOUNT_URL` | URL de la cuenta de almacenamiento (`https://<cuenta>.blob.core.windows.net`). |
+| `AZURE_STORAGE_CONTAINER` | Contenedor público de imágenes (`fincas-imagenes`). |
+| `AZURE_STORAGE_CONNECTION_STRING` | Solo desarrollo; en Azure se usa identidad administrada. |
 
-### 5.2. Cómo conectarse a Supabase
+### 5.2. Cómo conectarse
 
-1. Abre tu proyecto en el panel de Supabase.
-2. Ve a **Project Settings → API** y copia la URL y la API key.
-3. Pégalas en `SUPABASE_URL` y `SUPABASE_KEY` dentro de tu `.env`.
-4. Si la base está vacía, carga el esquema: en **SQL Editor** pega `supabase_schema.sql` y ejecútalo.
-5. Inicia la API con `npm start`.
+1. Crea el servidor PostgreSQL y la cuenta de almacenamiento en Azure.
+2. Ejecuta `db/azure/schema.sql` como administrador (ver el README, “Despliegue en Azure”).
+3. Copia `.env.example` a `.env` y completa las variables.
+4. Inicia la API con `npm start`. Si falta algo, falla al arrancar con un mensaje claro.
 
-> ⚠️ **Nunca subas tu `.env` a git ni compartas la clave *secret*.** El archivo `.gitignore` ya lo excluye, pero revísalo antes de un commit.
+> ⚠️ **Nunca subas tu `.env` a git.** El archivo `.gitignore` ya lo excluye, pero revísalo antes de un commit.
 
 ### 5.4. El esquema de la base de datos
 
-El archivo `supabase_schema.sql` es el “plano”. Tiene:
+El archivo `db/azure/schema.sql` es el “plano”. Tiene:
 
 - **9 tablas**: `Rol`, `Usuario`, `Municipio`, `Finca`, `Imagen`, `MetodoDePago`, `Reserva`, `Factura`, `Pago`.
 - **Relaciones** entre tablas (claves foráneas). Por ejemplo, una `Reserva` pertenece a una `Finca` y a un `Usuario`.
-- **36 funciones** llamadas `SP_...`. Quedan en el esquema por compatibilidad, pero la API ya no las usa: los DAO consultan las tablas directamente.
-- **Datos semilla**: roles (Administrador, Cliente, Propietario), municipios de Antioquia, métodos de pago y un usuario administrador.
+- **Restricciones y triggers** que impiden datos imposibles (fechas al revés, reservas solapadas, pagos que superan la factura).
+- **Procedimientos `sp_...`**: la única forma en que la API toca los datos. Su rol de base de datos no puede leer ni escribir tablas directamente.
+- **Datos semilla**: roles (Administrador, Cliente, Dueño de finca), municipios de Antioquia, métodos de pago y un usuario administrador.
 
 ### 5.5. ¿Cómo se usa la base de datos desde el código?
 
-Los DAO obtienen el cliente con `getSupabase()` (`src/conexion/supabase.ts`) y usan el constructor de consultas:
+Los DAO no contienen SQL: llaman a un procedimiento con parámetros mediante los helpers de `src/conexion/postgres.ts`:
 
 ```ts
-const filas = await unwrap(getSupabase().from('Rol').select('IdRol, NombreRol').order('IdRol'));
+export const listar = (): Promise<Rol[]> => filas('sp_rol_listar');
+export const buscarPorId = (id: number): Promise<Rol | null> => fila('sp_rol_buscar', [id]);
 ```
 
-`unwrap()` devuelve los datos o lanza el error de Postgres, que `error.middleware` traduce a una respuesta 4xx en español. Los datos relacionados (por ejemplo, municipio y propietario de una finca) se piden con *embeds*: `Finca` → `Municipio(NombreMunicipio)`.
+Si la base rechaza un dato, el error de PostgreSQL (con su código) llega a `error.middleware`, que lo traduce a una respuesta 4xx en español. Los procedimientos ya devuelven los datos relacionados (por ejemplo, municipio y propietario de una finca) en la misma fila.
 
 ---
 
@@ -171,7 +174,7 @@ const filas = await unwrap(getSupabase().from('Rol').select('IdRol, NombreRol').
 
 ```bash
 npm install     # 1. Instala las librerías
-# 2. Crea tu archivo .env copiando .env.example con tu SUPABASE_URL y SUPABASE_KEY
+# 2. Crea tu archivo .env copiando .env.example con tu DATABASE_URL y las variables de Azure
 npm start       # 3. Arranca la API en modo desarrollo (http://localhost:3000)
 npm test        # 4. Ejecuta las pruebas
 npm run build   # 5. Compila TypeScript a JavaScript en la carpeta dist/
