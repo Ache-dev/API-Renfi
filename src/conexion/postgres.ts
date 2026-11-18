@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import envConfig from '../config/env.config';
 
+const LIMITE_LISTADOS = 1000; // igual al DEFAULT de p_limite en db/azure/schema.sql
 let pool: Pool | null = null;
 
 /**
@@ -39,7 +40,10 @@ const llamada = (sp: string, args: unknown[]) =>
  * Procedimiento que devuelve varias filas (SETOF jsonb): arreglo de objetos.
  */
 export async function filas<T = any>(sp: string, args: unknown[] = []): Promise<T[]> {
-    return (await llamada(sp, args)).rows.map((f) => f.r);
+    const resultado = (await llamada(sp, args)).rows.map((f) => f.r);
+    // Los listados sin acotar tienen un tope duro de 1000 filas en la base (p_limite): si se alcanza, la lista puede estar truncada
+    if (resultado.length >= LIMITE_LISTADOS) console.warn(`[Postgres] ${sp} devolvió ${resultado.length} filas (el tope): el resultado puede estar truncado.`);
+    return resultado;
 }
 
 /**

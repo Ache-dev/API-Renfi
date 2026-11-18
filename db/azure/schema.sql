@@ -383,6 +383,9 @@ FROM "Imagen" i LEFT JOIN "Finca" f ON f."IdFinca" = i."IdFinca";
 --    (23505, 23514, 23P01, 22001...) llegan intactos a error.middleware.
 -- =============================================================================
 
+-- Los listados sin acotar llevan un tope duro (p_limite, 1000 por defecto) para que una tabla grande no
+-- produzca respuestas gigantes (CPU, ancho de banda y memoria). La API avisa en el log si un listado lo alcanza.
+
 -- ---------- Rol ----------
 CREATE FUNCTION sp_rol_listar() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(r) FROM "Rol" r ORDER BY "IdRol";
@@ -423,14 +426,15 @@ CREATE FUNCTION sp_municipio_contar_fincas(p_id int) RETURNS int LANGUAGE sql ST
     SELECT count(*)::int FROM "Finca" WHERE "IdMunicipio" = p_id;
 $$;
 -- Reporte: reservas por finca y municipio, de mayor a menor
-CREATE FUNCTION sp_municipio_mas_reservas() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+CREATE FUNCTION sp_municipio_mas_reservas(p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT jsonb_build_object('NombreMunicipio', m."NombreMunicipio", 'IdFinca', f."IdFinca",
                               'NombreFinca', f."NombreFinca", 'TotalReservas', count(*))
     FROM "Reserva" r
     JOIN "Finca" f ON f."IdFinca" = r."IdFinca"
     JOIN "Municipio" m ON m."IdMunicipio" = f."IdMunicipio"
     GROUP BY m."NombreMunicipio", f."IdFinca", f."NombreFinca"
-    ORDER BY count(*) DESC, f."IdFinca";
+    ORDER BY count(*) DESC, f."IdFinca"
+    LIMIT p_limite;
 $$;
 
 -- ---------- MetodoDePago ----------
@@ -454,8 +458,9 @@ CREATE FUNCTION sp_metodo_contar_pagos(p_id int) RETURNS int LANGUAGE sql STABLE
 $$;
 
 -- ---------- Usuario ----------
-CREATE FUNCTION sp_usuario_listar() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-    SELECT to_jsonb(u) FROM vw_usuario u ORDER BY "NumeroDocumento";
+CREATE FUNCTION sp_usuario_listar(p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    SELECT to_jsonb(u) FROM vw_usuario u ORDER BY "NumeroDocumento"
+    LIMIT p_limite;
 $$;
 CREATE FUNCTION sp_usuario_buscar(p_documento int) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(u) FROM vw_usuario u WHERE "NumeroDocumento" = p_documento;
@@ -483,8 +488,9 @@ $$;
 -- p_ficha es un jsonb con SOLO los campos de la ficha que se enviaron (Habitaciones, Banos, Camas,
 -- NochesMinimas, Comodidades, Reglas, HoraEntrada, HoraSalida, PermiteMascotas, PermiteEventos,
 -- Latitud, Longitud). En insert, lo ausente toma el valor por defecto; en update, lo ausente no cambia.
-CREATE FUNCTION sp_finca_listar() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-    SELECT to_jsonb(f) FROM vw_finca f ORDER BY "IdFinca";
+CREATE FUNCTION sp_finca_listar(p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    SELECT to_jsonb(f) FROM vw_finca f ORDER BY "IdFinca"
+    LIMIT p_limite;
 $$;
 CREATE FUNCTION sp_finca_listar_propietario(p_documento int) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(f) FROM vw_finca f WHERE "NumeroDocumentoUsuario" = p_documento ORDER BY "IdFinca";
@@ -551,11 +557,12 @@ CREATE FUNCTION sp_finca_mas_reservadas(p_limite int DEFAULT 5) RETURNS SETOF js
     ORDER BY count(*) DESC, f."IdFinca"
     LIMIT p_limite;
 $$;
-CREATE FUNCTION sp_finca_promedio_calificacion() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+CREATE FUNCTION sp_finca_promedio_calificacion(p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT jsonb_build_object('IdFinca', "IdFinca", 'NombreFinca', "NombreFinca",
                               'PromedioCalificacion', round("Calificacion"::numeric, 2))
     FROM "Finca" WHERE "Calificacion" IS NOT NULL
-    ORDER BY "Calificacion" DESC, "IdFinca";
+    ORDER BY "Calificacion" DESC, "IdFinca"
+    LIMIT p_limite;
 $$;
 -- Suma de pagos 'Pagado' por finca, de mayor a menor (p_limite NULL = todas)
 CREATE FUNCTION sp_finca_ingresos(p_limite int DEFAULT NULL) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -571,14 +578,15 @@ CREATE FUNCTION sp_finca_ingresos(p_limite int DEFAULT NULL) RETURNS SETOF jsonb
 $$;
 
 -- ---------- Imagen ----------
-CREATE FUNCTION sp_imagen_listar() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+CREATE FUNCTION sp_imagen_listar(p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(i) || jsonb_build_object('Direccion', f."Direccion", 'NombreMunicipio', m."NombreMunicipio",
                                              'NombrePropietario', u."NombreUsuario", 'ApellidoPropietario', u."ApellidoUsuario")
     FROM vw_imagen i
     JOIN "Finca" f     ON f."IdFinca" = i."IdFinca"
     JOIN "Municipio" m ON m."IdMunicipio" = f."IdMunicipio"
     JOIN "Usuario" u   ON u."NumeroDocumento" = f."NumeroDocumentoUsuario"
-    ORDER BY i."IdImagen";
+    ORDER BY i."IdImagen"
+    LIMIT p_limite;
 $$;
 CREATE FUNCTION sp_imagen_por_finca(p_finca int) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(i) - 'NombreFinca' FROM vw_imagen i WHERE "IdFinca" = p_finca
@@ -644,23 +652,26 @@ $$;
 
 -- ---------- Reserva ----------
 -- Filtros opcionales (NULL = sin filtrar). Estado y correo comparan sin distinguir mayúsculas.
-CREATE FUNCTION sp_reserva_listar(p_documento int DEFAULT NULL, p_finca int DEFAULT NULL, p_estado text DEFAULT NULL, p_correo text DEFAULT NULL)
+CREATE FUNCTION sp_reserva_listar(p_documento int DEFAULT NULL, p_finca int DEFAULT NULL, p_estado text DEFAULT NULL, p_correo text DEFAULT NULL, p_limite int DEFAULT 1000)
 RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(r) FROM vw_reserva r
     WHERE (p_documento IS NULL OR "NumeroDocumentoUsuario" = p_documento)
       AND (p_finca IS NULL OR "IdFinca" = p_finca)
       AND (p_estado IS NULL OR lower("Estado") = lower(btrim(p_estado)))
       AND (p_correo IS NULL OR lower("CorreoCliente") = lower(btrim(p_correo)))
-    ORDER BY "FechaReserva" DESC, "IdReserva" DESC;
+    ORDER BY "FechaReserva" DESC, "IdReserva" DESC
+    LIMIT p_limite;
 $$;
 CREATE FUNCTION sp_reserva_buscar(p_id int) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(r) FROM vw_reserva r WHERE "IdReserva" = p_id;
 $$;
-CREATE FUNCTION sp_reserva_listar_usuario(p_documento int) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-    SELECT to_jsonb(r) FROM vw_reserva r WHERE "NumeroDocumentoUsuario" = p_documento ORDER BY "FechaReserva" DESC, "IdReserva" DESC;
+CREATE FUNCTION sp_reserva_listar_usuario(p_documento int, p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    SELECT to_jsonb(r) FROM vw_reserva r WHERE "NumeroDocumentoUsuario" = p_documento ORDER BY "FechaReserva" DESC, "IdReserva" DESC
+    LIMIT p_limite;
 $$;
-CREATE FUNCTION sp_reserva_listar_propietario(p_documento int) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-    SELECT to_jsonb(r) FROM vw_reserva r WHERE "IdPropietario" = p_documento ORDER BY "FechaReserva" DESC, "IdReserva" DESC;
+CREATE FUNCTION sp_reserva_listar_propietario(p_documento int, p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    SELECT to_jsonb(r) FROM vw_reserva r WHERE "IdPropietario" = p_documento ORDER BY "FechaReserva" DESC, "IdReserva" DESC
+    LIMIT p_limite;
 $$;
 CREATE FUNCTION sp_reserva_insertar(p_finca int, p_documento int, p_fecha_reserva timestamp, p_entrada timestamp, p_salida timestamp, p_monto int, p_estado text)
 RETURNS int LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -690,16 +701,18 @@ CREATE FUNCTION sp_reserva_reglas_finca(p_finca int) RETURNS jsonb LANGUAGE sql 
     FROM "Finca" WHERE "IdFinca" = p_finca;
 $$;
 -- Fechas ocupadas (reservas no canceladas), sin datos personales
-CREATE FUNCTION sp_reserva_ocupadas_finca(p_finca int) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+CREATE FUNCTION sp_reserva_ocupadas_finca(p_finca int, p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT jsonb_build_object('IdFinca', "IdFinca", 'FechaEntrada', "FechaEntrada", 'FechaSalida', "FechaSalida")
     FROM "Reserva"
     WHERE "IdFinca" = p_finca AND lower(COALESCE("Estado", '')) NOT IN ('cancelada', 'cancelado', 'anulada', 'anulado')
-    ORDER BY "FechaEntrada";
+    ORDER BY "FechaEntrada"
+    LIMIT p_limite;
 $$;
 
 -- ---------- Factura ----------
-CREATE FUNCTION sp_factura_listar() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-    SELECT to_jsonb(f) FROM vw_factura f ORDER BY "IdFactura" DESC;
+CREATE FUNCTION sp_factura_listar(p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    SELECT to_jsonb(f) FROM vw_factura f ORDER BY "IdFactura" DESC
+    LIMIT p_limite;
 $$;
 CREATE FUNCTION sp_factura_buscar(p_id int) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(f) FROM vw_factura f WHERE "IdFactura" = p_id;
@@ -715,19 +728,22 @@ CREATE FUNCTION sp_factura_eliminar(p_id int) RETURNS void LANGUAGE sql SECURITY
 $$;
 
 -- ---------- Pago ----------
-CREATE FUNCTION sp_pago_listar() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-    SELECT to_jsonb(p) FROM vw_pago p ORDER BY "IdPago" DESC;
+CREATE FUNCTION sp_pago_listar(p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    SELECT to_jsonb(p) FROM vw_pago p ORDER BY "IdPago" DESC
+    LIMIT p_limite;
 $$;
-CREATE FUNCTION sp_pago_listar_propietario(p_documento int) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
-    SELECT to_jsonb(p) FROM vw_pago p WHERE "IdPropietario" = p_documento ORDER BY "IdPago" DESC;
+CREATE FUNCTION sp_pago_listar_propietario(p_documento int, p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+    SELECT to_jsonb(p) FROM vw_pago p WHERE "IdPropietario" = p_documento ORDER BY "IdPago" DESC
+    LIMIT p_limite;
 $$;
 CREATE FUNCTION sp_pago_buscar(p_id int) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT to_jsonb(p) FROM vw_pago p WHERE "IdPago" = p_id;
 $$;
-CREATE FUNCTION sp_pago_pendientes() RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
+CREATE FUNCTION sp_pago_pendientes(p_limite int DEFAULT 1000) RETURNS SETOF jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp AS $$
     SELECT jsonb_build_object('IdPago', "IdPago", 'IdFactura', "IdFactura", 'IdFinca', "IdFinca", 'NombreFinca', "NombreFinca",
                               'Monto', "Monto", 'FechaPago', "FechaPago", 'EstadoPago', "EstadoPago")
-    FROM vw_pago WHERE "EstadoPago" = 'Pendiente' AND "IdFinca" IS NOT NULL ORDER BY "IdPago";
+    FROM vw_pago WHERE "EstadoPago" = 'Pendiente' AND "IdFinca" IS NOT NULL ORDER BY "IdPago"
+    LIMIT p_limite;
 $$;
 CREATE FUNCTION sp_pago_insertar(p_factura int, p_metodo int, p_monto int, p_fecha timestamp, p_estado text) RETURNS int LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp AS $$
     INSERT INTO "Pago" ("IdFactura", "IdMetodoDePago", "Monto", "FechaPago", "EstadoPago") VALUES (p_factura, p_metodo, p_monto, p_fecha, p_estado) RETURNING "IdPago";

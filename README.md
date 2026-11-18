@@ -319,9 +319,10 @@ El control de acceso por rol y por propietario lo hace la capa de servicios con 
 | **Conexiones** | Cada petición lenta se corta (cabeceras 15 s, petición 60 s). El pool usa `DB_POOL_MAX` conexiones y espera como máximo 10 s por una libre (`503`). |
 | **Base de datos** | El rol `renfi_app` admite 30 conexiones; consultas de más de 15 s se cancelan; locks de más de 5 s fallan. |
 | **Campos** | Todos los textos tienen longitud máxima en la API y en la base (`VARCHAR(n)` y `CHECK`): p. ej. nombres 100, reglas 1000, texto alternativo 200, comodidades 30 de 50 caracteres. |
+| **Listados** | Tope duro de 1000 filas por listado (usuarios, fincas, reservas, pagos, facturas, imágenes y reportes), aplicado en los procedimientos `sp_*` (`p_limite`). Si algún listado lo alcanza, la API lo avisa en el log (`[Postgres] ... puede estar truncado`): ese es el momento de añadir paginación. |
 | **Cuotas (triggers)** | 50 fincas por propietario, 10 imágenes por finca, 20 reservas pendientes por usuario. |
 
-Detrás de Azure App Service el límite por IP necesita `TRUST_PROXY=1` (ya es el valor por defecto en producción). El contador vive en la memoria de cada instancia: con varias instancias, cada una cuenta aparte; para un límite global usa Azure Front Door o API Management.
+Detrás de Azure App Service el límite por IP necesita `TRUST_PROXY=1` (ya es el valor por defecto en producción). El contador vive en la memoria de cada instancia: con varias instancias, cada una cuenta aparte; para un límite global usa Azure Front Door o API Management (se configura en Azure, no en el código). Las cuotas por propietario (50 fincas, etc.) valen para todos los dueños, incluido el administrador, y se cuentan por propietario de la finca, no por quien la crea.
 
 ---
 
