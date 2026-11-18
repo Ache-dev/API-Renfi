@@ -150,6 +150,12 @@ CREATE UNIQUE INDEX "ux_imagen_portada"       ON "Imagen" ("IdFinca") WHERE "EsP
 -- =============================================================================
 -- 3. RESTRICCIONES (mismos límites que src/services/validacion.ts)
 -- =============================================================================
+-- Longitud del elemento más largo de una lista de textos (los CHECK no admiten subconsultas)
+CREATE FUNCTION fn_longitud_maxima(p_lista text[]) RETURNS int
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $$
+    SELECT COALESCE(max(char_length(x)), 0)::int FROM unnest(p_lista) AS x;
+$$;
+
 ALTER TABLE "Usuario"
     ADD CONSTRAINT ck_usuario_nombres CHECK (char_length(btrim("NombreUsuario")) BETWEEN 1 AND 100
         AND char_length(btrim("ApellidoUsuario")) BETWEEN 1 AND 100),
@@ -169,7 +175,8 @@ ALTER TABLE "Finca"
         AND "Capacidad" BETWEEN 1 AND 500
         AND "Calificacion" BETWEEN 1 AND 5
         AND "Estado" IN ('Disponible', 'No disponible')
-        AND cardinality("Comodidades") <= 30),
+        AND cardinality("Comodidades") <= 30
+        AND fn_longitud_maxima("Comodidades") <= 50),
     ADD CONSTRAINT ck_finca_ficha CHECK (
         "Habitaciones" BETWEEN 0 AND 100
         AND "Banos" BETWEEN 0 AND 100
@@ -190,6 +197,15 @@ ALTER TABLE "Reserva"
     -- Dos reservas vivas de la misma finca no pueden compartir noches, ni con peticiones simultáneas
     ADD CONSTRAINT ex_reserva_sin_solape EXCLUDE USING gist ("IdFinca" WITH =, tsrange("FechaEntrada", "FechaSalida") WITH &&)
         WHERE (lower("Estado") NOT IN ('cancelada', 'cancelado', 'anulada', 'anulado'));
+
+-- Límites de almacenamiento: nada de archivos o metadatos fuera de lo que la API produce
+ALTER TABLE "Imagen"
+    ADD CONSTRAINT ck_imagen_limites CHECK (
+        char_length(btrim("RutaStorage")) >= 1
+        AND "Orden" BETWEEN 0 AND 1000
+        AND ("TamanoBytes" IS NULL OR "TamanoBytes" BETWEEN 1 AND 5242880)
+        AND ("Ancho" IS NULL OR "Ancho" BETWEEN 1 AND 4000)
+        AND ("Alto" IS NULL OR "Alto" BETWEEN 1 AND 4000));
 
 ALTER TABLE "Factura" ADD CONSTRAINT ck_factura_total CHECK ("Total" >= 0);
 
@@ -237,6 +253,44 @@ END $$;
 CREATE TRIGGER tg_usuario_normaliza_correo
     BEFORE INSERT OR UPDATE OF "Correo" ON "Usuario"
     FOR EACH ROW EXECUTE FUNCTION fn_usuario_normaliza_correo();
+
+-- 4.3 Cuota: un propietario puede tener como máximo 50 fincas (evita crecimiento sin control)
+CREATE FUNCTION fn_finca_cuota_por_dueno() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+BEGIN
+    IF NEW."NumeroDocumentoUsuario" IS NULL THEN
+        RETURN NEW;
+    END IF;
+    -- Serializa altas simultáneas del mismo propietario
+    PERFORM 1 FROM "Usuario" WHERE "NumeroDocumento" = NEW."NumeroDocumentoUsuario" FOR NO KEY UPDATE;
+    IF (SELECT count(*) FROM "Finca" WHERE "NumeroDocumentoUsuario" = NEW."NumeroDocumentoUsuario") >= 50 THEN
+        RAISE EXCEPTION 'Un propietario puede tener como máximo 50 fincas.';
+    END IF;
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER tg_finca_cuota_por_dueno
+    BEFORE INSERT ON "Finca"
+    FOR EACH ROW EXECUTE FUNCTION fn_finca_cuota_por_dueno();
+
+-- 4.4 Cuota: un usuario puede tener como máximo 20 reservas pendientes a la vez
+CREATE FUNCTION fn_reserva_cuota_pendientes() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
+BEGIN
+    IF NEW."NumeroDocumentoUsuario" IS NULL OR lower(COALESCE(NEW."Estado", '')) <> 'pendiente' THEN
+        RETURN NEW;
+    END IF;
+    PERFORM 1 FROM "Usuario" WHERE "NumeroDocumento" = NEW."NumeroDocumentoUsuario" FOR NO KEY UPDATE;
+    IF (SELECT count(*) FROM "Reserva"
+        WHERE "NumeroDocumentoUsuario" = NEW."NumeroDocumentoUsuario" AND lower("Estado") = 'pendiente') >= 20 THEN
+        RAISE EXCEPTION 'Tienes demasiadas reservas pendientes (máximo 20). Cancela o confirma alguna antes de reservar más.';
+    END IF;
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER tg_reserva_cuota_pendientes
+    BEFORE INSERT ON "Reserva"
+    FOR EACH ROW EXECUTE FUNCTION fn_reserva_cuota_pendientes();
 
 -- =============================================================================
 -- 5. VISTAS DE LECTURA (uso interno de los sp_*; la API no las consulta)
@@ -556,6 +610,10 @@ DECLARE
     v_id int;
 BEGIN
     PERFORM 1 FROM "Finca" WHERE "IdFinca" = p_finca FOR NO KEY UPDATE;
+    -- Mismo tope que MAX_IMAGENES_POR_FINCA en src/services/imagen.service.ts (aquí a prueba de subidas simultáneas)
+    IF (SELECT count(*) FROM "Imagen" WHERE "IdFinca" = p_finca) >= 10 THEN
+        RAISE EXCEPTION 'Cada finca admite máximo 10 imágenes. Elimina alguna antes de subir otra.';
+    END IF;
     SELECT COALESCE(MAX("Orden"), 0) + 1 INTO v_orden FROM "Imagen" WHERE "IdFinca" = p_finca;
     IF p_portada THEN
         UPDATE "Imagen" SET "EsPortada" = FALSE WHERE "IdFinca" = p_finca AND "EsPortada";
@@ -693,9 +751,10 @@ INSERT INTO "Municipio" ("IdMunicipio", "NombreMunicipio") VALUES
 INSERT INTO "MetodoDePago" ("IdMetodoDePago", "NombreMetodoDePago", "PagoMixto") VALUES
 (1, 'Efectivo', false), (2, 'Transferencia Bancaria', false), (3, 'Tarjeta de Crédito', false), (4, 'Nequi / Daviplata', true);
 
--- Administrador inicial (contraseña admin123, hash bcrypt). ⚠️ CÁMBIALA al instalar.
+-- Administrador inicial: INACTIVO y con un hash que no coincide con ninguna contraseña (no hay clave por defecto).
+-- Actívalo y ponle contraseña con:  ADMIN_CONTRASENA='<clave-larga>' npm run crear-admin
 INSERT INTO "Usuario" ("NumeroDocumento", "IdRol", "NombreUsuario", "ApellidoUsuario", "Telefono", "Contrasena", "Correo", "Estado")
-VALUES (1, 1, 'Admin', 'Renfi', '3000000000', '$2b$10$Rk5vdWr3nCm9XKecOvhEDOfMDtQKx80q2a6V95E7G0AD6WN24Mf42', 'admin@renfi.com', 'Activo');
+VALUES (1, 1, 'Admin', 'Renfi', NULL, '$2b$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', 'admin@renfi.com', 'Inactivo');
 
 -- Las secuencias continúan después de los Ids sembrados
 SELECT setval(pg_get_serial_sequence('"Rol"', 'IdRol'), (SELECT MAX("IdRol") FROM "Rol"));
@@ -718,6 +777,11 @@ DECLARE f record;
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'renfi_app') THEN
         GRANT USAGE ON SCHEMA public TO renfi_app;
+        -- Topes de recursos para el rol de la API: aunque la API se descontrole, la base no se satura ni cobra de más
+        ALTER ROLE renfi_app CONNECTION LIMIT 30;
+        ALTER ROLE renfi_app SET statement_timeout = '15s';
+        ALTER ROLE renfi_app SET lock_timeout = '5s';
+        ALTER ROLE renfi_app SET idle_in_transaction_session_timeout = '10s';
         FOR f IN SELECT p.oid::regprocedure AS firma FROM pg_proc p
                  WHERE p.pronamespace = 'public'::regnamespace AND p.proname LIKE 'sp\_%'
         LOOP

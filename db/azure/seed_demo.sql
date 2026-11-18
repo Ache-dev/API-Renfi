@@ -1,5 +1,11 @@
--- Seed demo de Renfi: fuente unica de verdad (antes SEED_FINCAS / SEED_USUARIOS en memoria).
--- Idempotente. Se ejecuta a mano en el SQL Editor, después de las migraciones.
+-- Seed DEMO de Renfi, SOLO PARA DESARROLLO: crea usuarios con contraseñas públicas (admin123, cliente123, dueno123).
+-- Idempotente. Va después de db/azure/schema.sql. Para evitar cargarlo en producción por error,
+-- hay que pedirlo explícitamente:   psql "$DATABASE_URL_ADMIN" -v permitir_demo=1 -f db/azure/seed_demo.sql
+\if :{?permitir_demo}
+\else
+    \echo 'seed_demo.sql NO se ejecutó: pasa -v permitir_demo=1 si de verdad es un entorno de desarrollo.'
+    \quit
+\endif
 
 INSERT INTO public."Rol" ("IdRol", "NombreRol") VALUES (1,'Administrador'),(2,'Cliente'),(3,'Dueño de finca') ON CONFLICT DO NOTHING;
 
@@ -16,7 +22,8 @@ INSERT INTO public."Usuario" ("NumeroDocumento","IdRol","NombreUsuario","Apellid
 (10002,2,'Juan','Pérez','3109876543','$2b$10$dRUoFF/e/DwLYPUUtxqLy.lPITVLvQwB/d55REXGt5T8tN1yHhGPG','juan.perez@example.com','Activo'),
 (10003,2,'Cliente','Demo','3114567890','$2b$10$dRUoFF/e/DwLYPUUtxqLy.lPITVLvQwB/d55REXGt5T8tN1yHhGPG','cliente@renfi.com','Activo'),
 (10004,3,'Dueño','Demo','3125551234','$2b$10$2f0d5BeVsRgWA6xZq2/KtuEZkcUdoAo6euGvnrB5Yivj14lZSmwOi','dueno@renfi.com','Activo')
-ON CONFLICT DO NOTHING;
+-- El admin del esquema base viene inactivo y sin clave: en desarrollo se activa con la clave demo (admin123)
+ON CONFLICT ("NumeroDocumento") DO UPDATE SET "Contrasena" = EXCLUDED."Contrasena", "Estado" = 'Activo', "Telefono" = EXCLUDED."Telefono";
 
 INSERT INTO public."Finca" ("IdFinca","IdMunicipio","NumeroDocumentoUsuario","NombreFinca","Direccion","InformacionAdicional","Capacidad","Precio","Estado","Calificacion")
 OVERRIDING SYSTEM VALUE

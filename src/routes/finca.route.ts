@@ -5,8 +5,12 @@ import { validarId } from '../middlewares/validate-id.middleware';
 import * as imagenController from '../controllers/imagen.controller';
 import { soloAdmin, adminODueno, duenoOAdmin } from '../middlewares/auth.middleware';
 import { recibirImagen } from '../middlewares/upload.middleware';
+import { limitarIntentos } from '../middlewares/rate-limit.middleware';
 
 const router = Router();
+
+// Subir fotos cuesta CPU, ancho de banda y almacenamiento: máximo 20 por IP cada 10 minutos
+const limiteSubidas = limitarIntentos(20, 10 * 60 * 1000);
 
 // Administrador o dueño de la finca; si no existe responde 404
 const duenoDeFinca = duenoOAdmin((id) => fincaDao.propietarioDe(id));
@@ -28,7 +32,7 @@ router.delete('/delete', ...soloAdmin, validarId, fincaController.eliminarPorId)
 
 router.get('/:id', validarId, fincaController.buscarPorId);
 // Galería: se suben archivos (multipart, campo "imagen") y se alojan en Azure Blob Storage
-router.post('/:id/imagenes', validarId, ...duenoDeFinca, recibirImagen, imagenController.subirImagenFinca);
+router.post('/:id/imagenes', validarId, ...duenoDeFinca, limiteSubidas, recibirImagen, imagenController.subirImagenFinca);
 
 // Editar y eliminar: el administrador o el dueño de esa finca
 router.put('/:id', validarId, ...duenoDeFinca, fincaController.actualizarFinca);

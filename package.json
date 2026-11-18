@@ -6,6 +6,7 @@
     "build": "tsc",
     "start": "ts-node-dev --respawn --transpile-only src/index.ts",
     "serve": "node dist/index.js",
+    "crear-admin": "ts-node --transpile-only scripts/crear-admin.ts",
     "tsc": "tsc",
     "test": "node --require ts-node/register/transpile-only --test \"test/**/*.test.ts\""
   },

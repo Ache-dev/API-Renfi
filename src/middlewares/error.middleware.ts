@@ -17,16 +17,41 @@ export class AppError extends Error {
 
 const esPlano = (v: unknown) => v === null || ['string', 'number', 'boolean'].includes(typeof v);
 
+// Topes de tamaño del cuerpo JSON (el cuerpo total ya está limitado a 100 kb)
+export const MAX_CAMPOS = 50;
+export const MAX_TEXTO = 2000; // el campo de texto más largo (Reglas) admite 1000
+const textoCorto = (v: unknown) => typeof v !== 'string' || v.length <= MAX_TEXTO;
+
 /**
  * Rechaza cuerpos con objetos anidados ({"Correo": {"$ne": 1}}) o arrays de objetos: los
  * servicios esperan textos y números, y un objeto en su lugar terminaría en un 500.
+ * También limita la cantidad de campos y la longitud de cada texto.
  */
 export const soloValoresPlanos = (req: Request, _res: Response, next: NextFunction): void => {
     const body = req.body;
     if (body === undefined || body === null) return next();
     const valido = typeof body === 'object' && !Array.isArray(body)
-        && Object.values(body).every((v) => esPlano(v) || (Array.isArray(v) && v.length <= 100 && v.every(esPlano)));
-    next(valido ? undefined : new AppError('El cuerpo de la petición debe ser un objeto con valores simples (texto, número, booleano o lista).', 400));
+        && Object.keys(body).length <= MAX_CAMPOS
+        && Object.values(body).every((v) =>
+            (esPlano(v) && textoCorto(v)) || (Array.isArray(v) && v.length <= 100 && v.every((x) => esPlano(x) && textoCorto(x))));
+    next(valido ? undefined : new AppError(`El cuerpo de la petición debe ser un objeto con valores simples (texto, número, booleano o lista), máximo ${MAX_CAMPOS} campos y ${MAX_TEXTO} caracteres por texto.`, 400));
+};
+
+/**
+ * Limita la dirección y los parámetros de consulta: URL de hasta 2048 caracteres, 20 parámetros
+ * de hasta 200 caracteres (los filtros reales son ids, correos y estados cortos).
+ */
+export const limitarConsulta = (req: Request, _res: Response, next: NextFunction): void => {
+    if (req.originalUrl.length > 2048) return next(new AppError('La dirección solicitada es demasiado larga.', 414));
+    const entradas = Object.entries(req.query);
+    if (entradas.length > 20) return next(new AppError('Demasiados parámetros de consulta.', 400));
+    for (const [clave, valor] of entradas) {
+        const valores = Array.isArray(valor) ? valor : [valor];
+        if (clave.length > 50 || valores.length > 20 || valores.some((x) => typeof x === 'string' && x.length > 200)) {
+            return next(new AppError('Algún parámetro de consulta es inválido o demasiado largo (máximo 200 caracteres).', 400));
+        }
+    }
+    next();
 };
 
 const CONN_CODES =new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'EAI_AGAIN', 'ECONNABORTED']);

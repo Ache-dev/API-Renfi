@@ -13,9 +13,13 @@ export default function getPool(): Pool {
         pool = new Pool({
             connectionString: envConfig.DATABASE_URL,
             ssl: envConfig.NODE_ENV === 'production' ? { rejectUnauthorized: true } : undefined,
-            max: 10,
+            max: envConfig.DB_POOL_MAX,
             idleTimeoutMillis: 30_000,
-            connectionTimeoutMillis: 10_000
+            connectionTimeoutMillis: 10_000, // esperar una conexión libre más que esto falla (503) en vez de apilar peticiones
+            statement_timeout: 15_000, // la base cancela consultas que pasen de 15 s
+            query_timeout: 20_000,
+            idle_in_transaction_session_timeout: 10_000,
+            application_name: 'renfi-api'
         });
         // Un error en una conexión inactiva no debe tumbar el proceso
         pool.on('error', (err) => console.error('[Postgres] Error en una conexión inactiva:', err.message));

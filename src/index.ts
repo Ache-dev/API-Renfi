@@ -31,6 +31,10 @@ const iniciar = async () => {
         console.log(`====================================================`);
     });
 
+    // Conexiones lentas o colgadas no pueden retener recursos indefinidamente
+    server.headersTimeout = 15_000;
+    server.requestTimeout = 60_000; // alcanza para subir 5 MB desde una conexión móvil lenta
+
     // Cierre controlado de conexiones (Graceful shutdown)
     const gracefulShutdown = (signal: string) => {
         console.log(`\n[${signal}] Apagando servidor ordenadamente...`);

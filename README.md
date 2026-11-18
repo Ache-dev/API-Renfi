@@ -253,10 +253,10 @@ La API arranca con `npm start` (desarrollo) o `npm run build && npm run serve`. 
    - Restricciones `CHECK`, unicidad (correo, una factura por reserva, una portada por finca) y `EXCLUDE` contra reservas solapadas.
    - **Triggers**: un pago no puede exceder el total de su factura; el correo se normaliza a minúsculas.
    - **Procedimientos almacenados `sp_*`** (única vía de acceso de la API) y las vistas internas que usan.
-   - Los **datos semilla** (roles, municipios, métodos de pago y administrador `admin@renfi.com` / `admin123`: cámbiala al instalar).
+   - Los **datos semilla** (roles, municipios y métodos de pago). El administrador `admin@renfi.com` viene **inactivo y sin contraseña**: actívalo con `ADMIN_CONTRASENA='<clave de 12+ caracteres>' npm run crear-admin`.
    - Permisos: `renfi_app` solo tiene `EXECUTE` sobre los `sp_*`; no puede leer ni escribir tablas.
-4. Datos de ejemplo para desarrollo (opcional, **nunca en producción**): [`db/azure/seed_demo.sql`](db/azure/seed_demo.sql).
-5. Para traer los datos de una base anterior: [`db/azure/migrar_datos.md`](db/azure/migrar_datos.md).
+4. Datos de ejemplo para desarrollo (opcional, **nunca en producción**): `psql ... -v permitir_demo=1 -f db/azure/seed_demo.sql`. Sin esa bandera el script no hace nada.
+5. Para traer los datos de una base anterior: [`db/azure/migrar_datos.md`](db/azure/migrar_datos.md) (incluye `diagnostico_origen.sql`, de solo lectura, para detectar filas que incumplen las reglas antes de migrar).
 
 ### Paso 2: Blob Storage
 Crea el contenedor `fincas-imagenes` con acceso público de lectura a blobs (la cuenta debe permitir acceso anónimo). En Azure, asigna a la identidad de la API el rol *Storage Blob Data Contributor*. Para copiar las imágenes existentes: [`scripts/migrar-storage.sh`](scripts/migrar-storage.sh).
@@ -305,6 +305,23 @@ La API es la **única puerta de entrada** a la base de datos: las apps (Expo, An
 | Listados completos, reportes, roles, y escritura de catálogos | No | No | Sí |
 
 El control de acceso por rol y por propietario lo hace la capa de servicios con el JWT; la base solo ve a `renfi_app`.
+
+---
+
+## 🚦 Límites de uso (contra caídas y sobrecostos)
+
+| Dónde | Límite |
+|---|---|
+| **Peticiones por IP** | 300 por minuto en total y 60 escrituras por minuto; login y registro, 10 cada 15 min; subida de fotos, 20 cada 10 min. Al pasarse: `429` con `Retry-After`. |
+| **Cuerpo JSON** | 100 kb, hasta 50 campos, 2000 caracteres por texto, listas de hasta 100 elementos. |
+| **URL y consulta** | URL de hasta 2048 caracteres (`414`); hasta 20 parámetros de 200 caracteres como máximo. |
+| **Imágenes** | 5 MB, 10 por finca, 40 megapíxeles; se convierten a WebP de 1600 px. Máximo 2 conversiones a la vez y 8 en espera (después, `503`). Se sirven con caché de un año para reducir ancho de banda. |
+| **Conexiones** | Cada petición lenta se corta (cabeceras 15 s, petición 60 s). El pool usa `DB_POOL_MAX` conexiones y espera como máximo 10 s por una libre (`503`). |
+| **Base de datos** | El rol `renfi_app` admite 30 conexiones; consultas de más de 15 s se cancelan; locks de más de 5 s fallan. |
+| **Campos** | Todos los textos tienen longitud máxima en la API y en la base (`VARCHAR(n)` y `CHECK`): p. ej. nombres 100, reglas 1000, texto alternativo 200, comodidades 30 de 50 caracteres. |
+| **Cuotas (triggers)** | 50 fincas por propietario, 10 imágenes por finca, 20 reservas pendientes por usuario. |
+
+Detrás de Azure App Service el límite por IP necesita `TRUST_PROXY=1` (ya es el valor por defecto en producción). El contador vive en la memoria de cada instancia: con varias instancias, cada una cuenta aparte; para un límite global usa Azure Front Door o API Management.
 
 ---
 

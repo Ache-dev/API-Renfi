@@ -35,18 +35,13 @@ psql "$DST" -v ON_ERROR_STOP=1 -c 'TRUNCATE "Pago","Factura","Reserva","Imagen",
 
 ## 2. Revisar que los datos de origen cumplen las reglas del esquema nuevo
 
-El esquema de Azure tiene todas las restricciones **validadas**. Si en Supabase alguna restricción quedó `NOT VALID`, puede haber filas antiguas que las incumplen y la restauración fallaría en esas filas.
+El esquema de Azure tiene todas las restricciones **validadas**, y además cuotas (máx. 50 fincas por propietario, 10 imágenes por finca, 20 reservas pendientes por usuario). Si en el origen hay filas antiguas que las incumplen, `pg_restore` fallaría en esas filas. El diagnóstico es solo de lectura (solo `SELECT`):
 
 ```bash
-# Restricciones que en el origen siguen sin validar (ideal: 0 filas)
-psql "$SRC" -c "SELECT conrelid::regclass AS tabla, conname FROM pg_constraint WHERE NOT convalidated AND connamespace = 'public'::regnamespace;"
-
-# Contraseñas que no son bcrypt (deben ser 0; si no, esos usuarios deben restablecer su clave antes de migrar)
-psql "$SRC" -c "SELECT \"NumeroDocumento\", \"Correo\" FROM public.\"Usuario\" WHERE \"Contrasena\" NOT LIKE '\$2%';"
-
-# Imágenes sin RutaStorage (deben ser 0)
-psql "$SRC" -c "SELECT count(*) FROM public.\"Imagen\" WHERE \"RutaStorage\" IS NULL;"
+psql "$SRC" -f db/azure/diagnostico_origen.sql
 ```
+
+Cada consulta debe devolver 0 filas.
 
 Corrige en el origen lo que aparezca antes de seguir.
 
@@ -109,6 +104,6 @@ Las imágenes se copian aparte con `scripts/migrar-storage.sh` (las rutas `RutaS
 
 ## 7. Después
 
-- Cambia la contraseña del administrador de ejemplo si lo conservaste.
+- El esquema no trae contraseña de administrador: tras restaurar tus usuarios reales ya tienes los tuyos. Si migraste sin administrador, créalo con `ADMIN_CONTRASENA='<clave-larga>' npm run crear-admin`.
 - Borra `renfi_datos.dump`.
 - Deja el proyecto de Supabase en solo lectura unos días como respaldo antes de eliminarlo.

@@ -10,6 +10,26 @@ export const MAX_BYTES = 5 * 1024 * 1024;
 const LADO_MAXIMO = 1600;
 const FORMATOS_ACEPTADOS = ['jpeg', 'png', 'webp'];
 
+// Convertir imágenes es lo que más CPU y memoria consume: máximo 2 a la vez y 8 en espera; el resto recibe 503.
+const MAX_PARALELAS = 2;
+const MAX_EN_COLA = 8;
+let activas = 0;
+const cola: (() => void)[] = [];
+const conCupo = async <T>(trabajo: () => Promise<T>): Promise<T> => {
+    if (activas < MAX_PARALELAS) {
+        activas++;
+    } else {
+        if (cola.length >= MAX_EN_COLA) throw new AppError('El servidor está procesando muchas imágenes. Inténtalo de nuevo en unos segundos.', 503);
+        await new Promise<void>((libre) => cola.push(libre)); // el cupo se traspasa al despertar
+    }
+    try {
+        return await trabajo();
+    } finally {
+        const siguiente = cola.shift();
+        if (siguiente) siguiente(); else activas--;
+    }
+};
+
 const verificarFinca = async (idFinca: number): Promise<void> => {
     if (!(await imagenDao.existeFinca(idFinca))) {
         throw new AppError(`Finca con ID ${idFinca} no encontrada`, 404);
@@ -52,7 +72,7 @@ export const buscarPorId = async (id: number): Promise<Imagen | null> => {
  * Valida que sea una imagen real (por su contenido, no por el nombre o el tipo declarado),
  * la reduce a 1600 px, corrige la orientación, elimina los metadatos (EXIF/GPS) y la convierte a WebP.
  */
-export const procesarImagen = async (original: Buffer): Promise<{ buffer: Buffer; ancho: number; alto: number }> => {
+export const procesarImagen = (original: Buffer): Promise<{ buffer: Buffer; ancho: number; alto: number }> => conCupo(async () => {
     try {
         const entrada = sharp(original, { limitInputPixels: 40_000_000, failOn: 'error' });
         const { format } = await entrada.metadata();
@@ -69,7 +89,7 @@ export const procesarImagen = async (original: Buffer): Promise<{ buffer: Buffer
         if (err instanceof AppError) throw err;
         throw new AppError('El archivo no es una imagen válida.', 400);
     }
-};
+});
 
 /**
  * Sube una imagen a Azure Blob Storage y la agrega a la galería de la finca.

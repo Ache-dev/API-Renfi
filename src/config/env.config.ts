@@ -12,8 +12,13 @@ export const envConfig = {
     NODE_ENV: process.env.NODE_ENV || 'development',
     PORT: Number(process.env.PORT) || 3000,
 
+    // Número de proxies de confianza delante de la API (1 en Azure App Service). Necesario para ver la IP real del cliente.
+    TRUST_PROXY: Number(process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? 1 : 0)) || 0,
+
     // Azure Database for PostgreSQL (cadena de conexión del rol renfi_app)
     DATABASE_URL: process.env.DATABASE_URL || '',
+    // Conexiones máximas por instancia de la API (el servidor limita al rol a 30 en total: instancias x pool <= 30)
+    DB_POOL_MAX: Math.min(Math.max(Number(process.env.DB_POOL_MAX) || 10, 1), 30),
 
     // Azure Blob Storage: contenedor público de imágenes de fincas
     AZURE_STORAGE: {
