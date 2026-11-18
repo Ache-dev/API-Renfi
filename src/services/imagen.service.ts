@@ -72,7 +72,7 @@ export const procesarImagen = async (original: Buffer): Promise<{ buffer: Buffer
 };
 
 /**
- * Sube una imagen a Supabase Storage y la agrega a la galería de la finca.
+ * Sube una imagen a Azure Blob Storage y la agrega a la galería de la finca.
  * La primera imagen de una finca queda como portada automáticamente.
  */
 export const subirImagenFinca = async (

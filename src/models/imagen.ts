@@ -1,5 +1,5 @@
 /**
- * Imagen de una finca, alojada en Supabase Storage (RutaStorage).
+ * Imagen de una finca, alojada en Azure Blob Storage (RutaStorage).
  * UrlImagen no es una columna: la API la calcula con la URL pública del archivo
  * para que los clientes la muestren directamente.
  */

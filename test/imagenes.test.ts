@@ -9,7 +9,7 @@ import * as imagenDao from '../src/dao/imagen.dao';
 import * as storage from '../src/conexion/storage';
 import { huellaContrasena } from '../src/middlewares/auth.middleware';
 
-// Base de datos y Storage simulados: estas pruebas no escriben nada en Supabase.
+// Base de datos y Blob Storage simulados: estas pruebas no escriben nada en la base ni en Blob Storage.
 const usuarios: Record<number, any> = {
     1: { NumeroDocumento: 1, IdRol: 1, NombreRol: 'Administrador', NombreUsuario: 'Admin', Correo: 'a@a.com', Estado: 'Activo', Contrasena: '$2a$h1' },
     2: { NumeroDocumento: 2, IdRol: 2, NombreRol: 'Cliente', NombreUsuario: 'Cli', Correo: 'c@c.com', Estado: 'Activo', Contrasena: '$2a$h2' },
@@ -36,6 +36,7 @@ before(async () => {
         return id;
     });
     mock.method(imagenDao, 'buscarPorId', async (id: number) => imagenes.find((i) => i.IdImagen === id) ?? null);
+    mock.method(imagenDao, 'propietarioDe', async (id: number) => (imagenes.some((i) => i.IdImagen === id) ? 1 : null)); // la finca 1 es del admin
     mock.method(imagenDao, 'eliminarPorId', async (id: number) => { imagenes = imagenes.filter((i) => i.IdImagen !== id); });
     mock.method(imagenDao, 'primeraDeFinca', async (idFinca: number, excluir: number) =>
         imagenes.filter((i) => i.IdFinca === idFinca && i.IdImagen !== excluir).sort((a, b) => a.Orden - b.Orden)[0] ?? null);

@@ -1,53 +1,34 @@
-import getSupabase, { unwrap, unwrapOne, contar } from "../conexion/supabase";
+import { filas, fila, insertar as insertarSp, ejecutar, contar } from "../conexion/postgres";
 import { MetodoDePago } from "../models/metododepago";
-
-const COLUMNAS = 'IdMetodoDePago, NombreMetodoDePago, PagoMixto';
 
 /**
  * Lista todos los métodos de pago.
  */
-export const listar = async (): Promise<MetodoDePago[]> => {
-    return unwrap(getSupabase().from('MetodoDePago').select(COLUMNAS).order('IdMetodoDePago')) as Promise<MetodoDePago[]>;
-};
+export const listar = (): Promise<MetodoDePago[]> => filas('sp_metodo_listar');
 
 /**
  * Inserta un método de pago y retorna el IdMetodoDePago generado.
  */
-export const insertar = async (metodo: MetodoDePago): Promise<number> => {
-    const fila = await unwrapOne(
-        getSupabase().from('MetodoDePago')
-            .insert({ NombreMetodoDePago: metodo.NombreMetodoDePago, PagoMixto: Boolean(metodo.PagoMixto) })
-            .select('IdMetodoDePago').single()
-    );
-    return Number(fila.IdMetodoDePago);
-};
+export const insertar = (metodo: MetodoDePago): Promise<number> =>
+    insertarSp('sp_metodo_insertar', [metodo.NombreMetodoDePago, Boolean(metodo.PagoMixto)]);
 
 /**
  * Actualiza un método de pago existente.
  */
-export const actualizar = async (metodo: MetodoDePago): Promise<void> => {
-    await unwrap(
-        getSupabase().from('MetodoDePago')
-            .update({ NombreMetodoDePago: metodo.NombreMetodoDePago, PagoMixto: Boolean(metodo.PagoMixto) })
-            .eq('IdMetodoDePago', metodo.IdMetodoDePago)
-    );
-};
+export const actualizar = (metodo: MetodoDePago): Promise<void> =>
+    ejecutar('sp_metodo_actualizar', [metodo.IdMetodoDePago, metodo.NombreMetodoDePago, Boolean(metodo.PagoMixto)]);
 
 /**
  * Elimina un método de pago por su ID.
  */
-export const eliminarPorId = async (id: number): Promise<void> => {
-    await unwrap(getSupabase().from('MetodoDePago').delete().eq('IdMetodoDePago', id));
-};
+export const eliminarPorId = (id: number): Promise<void> => ejecutar('sp_metodo_eliminar', [id]);
 
 /**
  * Busca un método de pago por su ID.
  */
-export const buscarPorId = async (id: number): Promise<MetodoDePago | null> => {
-    return unwrap(getSupabase().from('MetodoDePago').select(COLUMNAS).eq('IdMetodoDePago', id).maybeSingle()) as Promise<MetodoDePago | null>;
-};
+export const buscarPorId = (id: number): Promise<MetodoDePago | null> => fila('sp_metodo_buscar', [id]);
 
 /**
  * Cuenta registros de Pago que referencian al id (el esquema usa ON DELETE SET NULL).
  */
-export const contarReferencias = (id: number): Promise<number> => contar('Pago', 'IdMetodoDePago', id);
+export const contarReferencias = (id: number): Promise<number> => contar('sp_metodo_contar_pagos', id);

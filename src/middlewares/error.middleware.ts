@@ -39,11 +39,11 @@ export const esErrorDeConexion = (err: any): boolean => {
     const code = String(err.code ?? '');
     if (CONN_CODES.has(code) || code.startsWith('08') || code.startsWith('57P')) return true;
     if (/^[0-9A-Z]{5}$/.test(code)) return false; // SQLSTATE (constraint, sintaxis, etc.)
-    return /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|fetch failed|Faltan SUPABASE|network|timeout/i.test(String(err.message ?? ''));
+    return /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|fetch failed|network|timeout/i.test(String(err.message ?? ''));
 };
 
 /**
- * Traduce errores de Postgres (vía PostgREST) a { status, message } en espanol, sin filtrar SQL.
+ * Traduce errores de Postgres (de los procedimientos almacenados) a { status, message } en espanol, sin filtrar SQL.
  */
 const mapPgError = (err: any): { status: number; message: string } | null => {
     const detail = String(err.detail ?? '');
@@ -56,7 +56,7 @@ const mapPgError = (err: any): { status: number; message: string } | null => {
         }
         case '23505': return { status: 409, message: 'Ya existe un registro con esos datos (valor duplicado).' };
         case '23502': return { status: 400, message: `El campo${col} es obligatorio.` };
-        // Restricciones de la base (db/migraciones/004): la última barrera si un dato inválido pasa la API
+        // Restricciones de la base (db/azure/schema.sql): la última barrera si un dato inválido pasa la API
         case '23514': return { status: 400, message: 'Alguno de los datos enviados está fuera de los valores permitidos.' };
         case '23P01': return { status: 409, message: 'La finca ya tiene una reserva en las fechas seleccionadas.' };
         case '22001': return { status: 400, message: 'Alguno de los textos enviados supera la longitud máxima permitida.' };

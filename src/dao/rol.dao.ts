@@ -1,43 +1,32 @@
-import getSupabase, { unwrap, unwrapOne, contar } from "../conexion/supabase";
+import { filas, fila, insertar as insertarSp, ejecutar, contar } from "../conexion/postgres";
 import { Rol } from "../models/rol";
 
 /**
  * Lista todos los roles registrados.
  */
-export const listar = async (): Promise<Rol[]> => {
-    return unwrap(getSupabase().from('Rol').select('IdRol, NombreRol').order('IdRol')) as Promise<Rol[]>;
-};
+export const listar = (): Promise<Rol[]> => filas('sp_rol_listar');
 
 /**
  * Inserta un nuevo rol y retorna el IdRol generado.
  */
-export const insertar = async (rol: Rol): Promise<number> => {
-    const fila = await unwrapOne(getSupabase().from('Rol').insert({ NombreRol: rol.NombreRol }).select('IdRol').single());
-    return Number(fila.IdRol);
-};
+export const insertar = (rol: Rol): Promise<number> => insertarSp('sp_rol_insertar', [rol.NombreRol]);
 
 /**
  * Actualiza un rol existente.
  */
-export const actualizar = async (rol: Rol): Promise<void> => {
-    await unwrap(getSupabase().from('Rol').update({ NombreRol: rol.NombreRol }).eq('IdRol', rol.IdRol));
-};
+export const actualizar = (rol: Rol): Promise<void> => ejecutar('sp_rol_actualizar', [rol.IdRol, rol.NombreRol]);
 
 /**
  * Elimina un rol por su ID.
  */
-export const eliminarPorId = async (id: number): Promise<void> => {
-    await unwrap(getSupabase().from('Rol').delete().eq('IdRol', id));
-};
+export const eliminarPorId = (id: number): Promise<void> => ejecutar('sp_rol_eliminar', [id]);
 
 /**
  * Busca un rol por su ID.
  */
-export const buscarPorId = async (id: number): Promise<Rol | null> => {
-    return unwrap(getSupabase().from('Rol').select('IdRol, NombreRol').eq('IdRol', id).maybeSingle()) as Promise<Rol | null>;
-};
+export const buscarPorId = (id: number): Promise<Rol | null> => fila('sp_rol_buscar', [id]);
 
 /**
  * Cuenta registros de Usuario que referencian al id (el esquema usa ON DELETE SET NULL).
  */
-export const contarReferencias = (id: number): Promise<number> => contar('Usuario', 'IdRol', id);
+export const contarReferencias = (id: number): Promise<number> => contar('sp_rol_contar_usuarios', id);

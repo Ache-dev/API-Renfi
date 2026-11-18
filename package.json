@@ -19,17 +19,20 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.3.0",
     "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.118.0",
+    "@azure/identity": "^4.14.1",
+    "@azure/storage-blob": "^12.34.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^18.0.5",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
+    "pg": "^8.23.1",
     "sharp": "^0.35.5"
   }
 }

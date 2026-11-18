@@ -1,4 +1,4 @@
-import getSupabase, { unwrap, unwrapOne, contar } from "../conexion/supabase";
+import { filas, fila, insertar as insertarSp, ejecutar, contar } from "../conexion/postgres";
 import { Municipio, MunicipioReporte } from "../models/municipio";
 
 export type { MunicipioReporte };
@@ -6,61 +6,35 @@ export type { MunicipioReporte };
 /**
  * Reporte: reservas por finca y municipio, de mayor a menor.
  */
-export const municipiosConMasReservas = async (): Promise<MunicipioReporte[]> => {
-    const filas: any[] = await unwrap(
-        getSupabase().from('Reserva').select('IdFinca, Finca!inner(NombreFinca, Municipio!inner(NombreMunicipio))')
-    );
-    const grupos = new Map<number, MunicipioReporte>();
-    for (const r of filas) {
-        const g = grupos.get(r.IdFinca) ?? {
-            NombreMunicipio: r.Finca.Municipio.NombreMunicipio,
-            IdFinca: r.IdFinca,
-            NombreFinca: r.Finca.NombreFinca,
-            TotalReservas: 0
-        };
-        g.TotalReservas++;
-        grupos.set(r.IdFinca, g);
-    }
-    return [...grupos.values()].sort((a, b) => b.TotalReservas - a.TotalReservas);
-};
+export const municipiosConMasReservas = (): Promise<MunicipioReporte[]> => filas('sp_municipio_mas_reservas');
 
 /**
  * Lista todos los municipios.
  */
-export const listar = async (): Promise<Municipio[]> => {
-    return unwrap(getSupabase().from('Municipio').select('IdMunicipio, NombreMunicipio').order('IdMunicipio')) as Promise<Municipio[]>;
-};
+export const listar = (): Promise<Municipio[]> => filas('sp_municipio_listar');
 
 /**
  * Inserta un nuevo municipio y retorna el IdMunicipio generado.
  */
-export const insertar = async (municipio: Municipio): Promise<number> => {
-    const fila = await unwrapOne(getSupabase().from('Municipio').insert({ NombreMunicipio: municipio.NombreMunicipio }).select('IdMunicipio').single());
-    return Number(fila.IdMunicipio);
-};
+export const insertar = (municipio: Municipio): Promise<number> => insertarSp('sp_municipio_insertar', [municipio.NombreMunicipio]);
 
 /**
  * Actualiza un municipio existente.
  */
-export const actualizar = async (municipio: Municipio): Promise<void> => {
-    await unwrap(getSupabase().from('Municipio').update({ NombreMunicipio: municipio.NombreMunicipio }).eq('IdMunicipio', municipio.IdMunicipio));
-};
+export const actualizar = (municipio: Municipio): Promise<void> =>
+    ejecutar('sp_municipio_actualizar', [municipio.IdMunicipio, municipio.NombreMunicipio]);
 
 /**
  * Elimina un municipio por su ID.
  */
-export const eliminarPorId = async (id: number): Promise<void> => {
-    await unwrap(getSupabase().from('Municipio').delete().eq('IdMunicipio', id));
-};
+export const eliminarPorId = (id: number): Promise<void> => ejecutar('sp_municipio_eliminar', [id]);
 
 /**
  * Busca un municipio por su ID.
  */
-export const buscarPorId = async (id: number): Promise<Municipio | null> => {
-    return unwrap(getSupabase().from('Municipio').select('IdMunicipio, NombreMunicipio').eq('IdMunicipio', id).maybeSingle()) as Promise<Municipio | null>;
-};
+export const buscarPorId = (id: number): Promise<Municipio | null> => fila('sp_municipio_buscar', [id]);
 
 /**
  * Cuenta registros de Finca que referencian al id (el esquema usa ON DELETE SET NULL).
  */
-export const contarReferencias = (id: number): Promise<number> => contar('Finca', 'IdMunicipio', id);
+export const contarReferencias = (id: number): Promise<number> => contar('sp_municipio_contar_fincas', id);

@@ -6,24 +6,21 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 /**
  * Configuración centralizada de variables de entorno de la aplicación.
- * Proporciona valores por defecto seguros para el entorno de desarrollo local.
  */
 export const envConfig = {
     // Entorno de ejecución y servidor
     NODE_ENV: process.env.NODE_ENV || 'development',
     PORT: Number(process.env.PORT) || 3000,
 
-    // Base de datos: Supabase (PostgREST). Acepta la clave publishable o la secret.
-    // Se mantienen los nombres NEXT_PUBLIC_* para reutilizar el .env de Renfi-ExpoGo.
-    SUPABASE: {
-        URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-        KEY: process.env.SUPABASE_SECRET_KEY
-            || process.env.SUPABASE_KEY
-            || process.env.SUPABASE_PUBLISHABLE_KEY
-            || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-            || '',
-        // Bucket público de imágenes de fincas (se crea con db/migraciones/001_imagenes_y_ficha_finca.sql)
-        BUCKET_FINCAS: process.env.SUPABASE_BUCKET_FINCAS || 'fincas-imagenes'
+    // Azure Database for PostgreSQL (cadena de conexión del rol renfi_app)
+    DATABASE_URL: process.env.DATABASE_URL || '',
+
+    // Azure Blob Storage: contenedor público de imágenes de fincas
+    AZURE_STORAGE: {
+        ACCOUNT_URL: (process.env.AZURE_STORAGE_ACCOUNT_URL || '').replace(/\/+$/, ''),
+        CONTAINER: process.env.AZURE_STORAGE_CONTAINER || 'fincas-imagenes',
+        // Solo desarrollo (Azurite o clave de la cuenta). En Azure se usa la identidad administrada.
+        CONNECTION_STRING: process.env.AZURE_STORAGE_CONNECTION_STRING || ''
     },
 
     // Seguridad y Autenticación JWT
@@ -42,3 +39,20 @@ export default envConfig;
 if (envConfig.JWT.SECRET.length < 32) {
     throw new Error('Define JWT_SECRET en el .env con al menos 32 caracteres (generalo con crypto.randomBytes(48).toString("hex")).');
 }
+
+/**
+ * Falla al arrancar, con un mensaje claro, si falta la configuración de base de datos o de Blob Storage.
+ * Se invoca desde src/index.ts (no al importar, para que las pruebas con servicios simulados no la necesiten).
+ */
+export const validarConfiguracion = (): void => {
+    const faltan: string[] = [];
+    if (!envConfig.DATABASE_URL) faltan.push('DATABASE_URL');
+    if (!envConfig.AZURE_STORAGE.ACCOUNT_URL) faltan.push('AZURE_STORAGE_ACCOUNT_URL');
+    if (!envConfig.AZURE_STORAGE.CONTAINER) faltan.push('AZURE_STORAGE_CONTAINER');
+    if (faltan.length) {
+        throw new Error(`Faltan variables de entorno obligatorias en el .env: ${faltan.join(', ')}. Revisa .env.example.`);
+    }
+    if (envConfig.NODE_ENV === 'production' && envConfig.AZURE_STORAGE.CONNECTION_STRING) {
+        console.warn('[Config] AZURE_STORAGE_CONNECTION_STRING es solo para desarrollo: en producción usa identidad administrada.');
+    }
+};

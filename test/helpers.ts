@@ -1,4 +1,4 @@
-// Estas pruebas solo hacen lecturas contra el Supabase configurado en .env (nunca escriben datos).
+// Estas pruebas solo hacen lecturas contra la base configurada en DATABASE_URL (.env) (nunca escriben datos).
 process.env.NODE_ENV = 'test';
 
 import type { AddressInfo } from 'net';

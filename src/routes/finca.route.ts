@@ -27,7 +27,7 @@ router.post('/', ...adminODueno, fincaController.crearFinca);
 router.delete('/delete', ...soloAdmin, validarId, fincaController.eliminarPorId);
 
 router.get('/:id', validarId, fincaController.buscarPorId);
-// Galería: se suben archivos (multipart, campo "imagen") y se alojan en Supabase Storage
+// Galería: se suben archivos (multipart, campo "imagen") y se alojan en Azure Blob Storage
 router.post('/:id/imagenes', validarId, ...duenoDeFinca, recibirImagen, imagenController.subirImagenFinca);
 
 // Editar y eliminar: el administrador o el dueño de esa finca
