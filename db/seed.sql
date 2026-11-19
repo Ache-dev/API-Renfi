@@ -1,5 +1,5 @@
 -- Seed demo de Renfi: fuente unica de verdad (antes SEED_FINCAS / SEED_USUARIOS en memoria).
--- Idempotente. Se aplica al iniciar la BD cuando public."Finca" tiene 0 filas.
+-- Idempotente. Se ejecuta a mano en el SQL Editor, después de las migraciones.
 
 INSERT INTO public."Rol" ("IdRol", "NombreRol") VALUES (1,'Administrador'),(2,'Cliente'),(3,'Dueño de finca') ON CONFLICT DO NOTHING;
 
@@ -8,13 +8,14 @@ INSERT INTO public."Municipio" ("IdMunicipio", "NombreMunicipio") OVERRIDING SYS
 (7,'El Peñol'),(8,'Barbosa'),(9,'Girardota'),(10,'Copacabana'),(11,'San Jerónimo'),(12,'La Ceja')
 ON CONFLICT DO NOTHING;
 
--- Usuarios demo (contrasena en texto plano; login acepta plano o SHA-512).
+-- Usuarios demo SOLO para desarrollo. Contraseñas (hash bcrypt): admin123, cliente123, dueno123.
+-- Nunca cargues este seed en producción: son credenciales públicas.
 -- NumeroDocumento 1 = admin@renfi.com (propietario de las fincas demo).
 INSERT INTO public."Usuario" ("NumeroDocumento","IdRol","NombreUsuario","ApellidoUsuario","Telefono","Contrasena","Correo","Estado") OVERRIDING SYSTEM VALUE VALUES
-(1,1,'Admin','Renfi','3001234567','admin123','admin@renfi.com','Activo'),
-(10002,2,'Juan','Pérez','3109876543','cliente123','juan.perez@example.com','Activo'),
-(10003,2,'Cliente','Demo','3114567890','cliente123','cliente@renfi.com','Activo'),
-(10004,3,'Dueño','Demo','3125551234','dueno123','dueno@renfi.com','Activo')
+(1,1,'Admin','Renfi','3001234567','$2b$10$Rk5vdWr3nCm9XKecOvhEDOfMDtQKx80q2a6V95E7G0AD6WN24Mf42','admin@renfi.com','Activo'),
+(10002,2,'Juan','Pérez','3109876543','$2b$10$dRUoFF/e/DwLYPUUtxqLy.lPITVLvQwB/d55REXGt5T8tN1yHhGPG','juan.perez@example.com','Activo'),
+(10003,2,'Cliente','Demo','3114567890','$2b$10$dRUoFF/e/DwLYPUUtxqLy.lPITVLvQwB/d55REXGt5T8tN1yHhGPG','cliente@renfi.com','Activo'),
+(10004,3,'Dueño','Demo','3125551234','$2b$10$2f0d5BeVsRgWA6xZq2/KtuEZkcUdoAo6euGvnrB5Yivj14lZSmwOi','dueno@renfi.com','Activo')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public."Finca" ("IdFinca","IdMunicipio","NumeroDocumentoUsuario","NombreFinca","Direccion","InformacionAdicional","Capacidad","Precio","Estado","Calificacion")

@@ -15,7 +15,21 @@ export class AppError extends Error {
     }
 }
 
-const CONN_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'EAI_AGAIN', 'ECONNABORTED']);
+const esPlano = (v: unknown) => v === null || ['string', 'number', 'boolean'].includes(typeof v);
+
+/**
+ * Rechaza cuerpos con objetos anidados ({"Correo": {"$ne": 1}}) o arrays de objetos: los
+ * servicios esperan textos y números, y un objeto en su lugar terminaría en un 500.
+ */
+export const soloValoresPlanos = (req: Request, _res: Response, next: NextFunction): void => {
+    const body = req.body;
+    if (body === undefined || body === null) return next();
+    const valido = typeof body === 'object' && !Array.isArray(body)
+        && Object.values(body).every((v) => esPlano(v) || (Array.isArray(v) && v.length <= 100 && v.every(esPlano)));
+    next(valido ? undefined : new AppError('El cuerpo de la petición debe ser un objeto con valores simples (texto, número, booleano o lista).', 400));
+};
+
+const CONN_CODES =new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE', 'EAI_AGAIN', 'ECONNABORTED']);
 
 /**
  * true solo para fallos de conexion/arranque de la BD (no errores SQL ni de negocio).
@@ -42,6 +56,10 @@ const mapPgError = (err: any): { status: number; message: string } | null => {
         }
         case '23505': return { status: 409, message: 'Ya existe un registro con esos datos (valor duplicado).' };
         case '23502': return { status: 400, message: `El campo${col} es obligatorio.` };
+        // Restricciones de la base (db/migraciones/004): la última barrera si un dato inválido pasa la API
+        case '23514': return { status: 400, message: 'Alguno de los datos enviados está fuera de los valores permitidos.' };
+        case '23P01': return { status: 409, message: 'La finca ya tiene una reserva en las fechas seleccionadas.' };
+        case '22001': return { status: 400, message: 'Alguno de los textos enviados supera la longitud máxima permitida.' };
         case '22P02': case '22007': case '22008': case '22003':
             return { status: 400, message: 'Alguno de los datos enviados tiene un formato o valor inválido.' };
         case 'P0001': return { status: 400, message: err.message };
@@ -69,7 +87,9 @@ export const errorHandler = (
         return;
     }
 
-    const pg = mapPgError(err);
+    const pg = esErrorDeConexion(err)
+        ? { status: 503, message: 'La base de datos no está disponible en este momento. Inténtalo más tarde.' }
+        : mapPgError(err);
     let statusCode = pg?.status ?? (err.statusCode || (err.status ? Number(err.status) : 500));
     let message = pg?.message ?? err.message ?? 'Error interno del servidor';
     // Errores no controlados: no exponer detalle interno
